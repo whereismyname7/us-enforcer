@@ -1,0 +1,16 @@
+{
+  "name": "srg-rules",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rules service. Checks a story's template, acceptance criteria, wording, INVEST and CR rules.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "4.19.2",
+    "js-yaml": "4.1.0",
+    "kafkajs": "2.2.4"
+  }
+}

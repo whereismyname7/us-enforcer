@@ -1,0 +1,5 @@
+{
+  "fields": {
+    "technicalNotes": "Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse. Also apply a discount to reserved items."
+  }
+}

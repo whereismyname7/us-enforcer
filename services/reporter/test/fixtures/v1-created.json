@@ -1,0 +1,214 @@
+{
+  "row": "v1-created",
+  "expected_level": 1,
+  "rules": {
+    "event_id": "11111111-1111-4111-8111-111111111101",
+    "type": "StoryChecked",
+    "version": 1,
+    "occurred_at": "2026-11-03T09:00:00.300Z",
+    "story_key": "NORTH-1",
+    "story_updated_at": "2026-11-03T09:00:00.100Z",
+    "source_event_id": "00000000-0000-4000-8000-000000000001",
+    "source_occurred_at": "2026-11-03T09:00:00.250Z",
+    "checker": "rules",
+    "checks": [
+      {
+        "id": "R-TPL-01",
+        "level": 1,
+        "severity": "block",
+        "passed": true,
+        "message": "Title follows [Area] short phrase"
+      },
+      {
+        "id": "R-TPL-02",
+        "level": 1,
+        "severity": "block",
+        "passed": true,
+        "message": "As a / I want / so that are filled"
+      },
+      {
+        "id": "R-INV-V",
+        "level": 1,
+        "severity": "warn",
+        "passed": true,
+        "message": "So that states a benefit"
+      },
+      {
+        "id": "R-AC-01",
+        "level": 2,
+        "severity": "block",
+        "passed": false,
+        "message": "1 criteria are not Given/When/Then"
+      },
+      {
+        "id": "R-AC-02",
+        "level": 2,
+        "severity": "block",
+        "passed": false,
+        "message": "Add a negative case (error, empty, not allowed)"
+      },
+      {
+        "id": "R-VAG-01",
+        "level": 2,
+        "severity": "block",
+        "passed": false,
+        "message": "Unmeasurable: \"quickly\". Use a number"
+      },
+      {
+        "id": "R-OPQ-01",
+        "level": 2,
+        "severity": "block",
+        "passed": false,
+        "message": "Open question left: \"TBD\""
+      },
+      {
+        "id": "R-CR-01",
+        "level": 3,
+        "severity": "block",
+        "passed": false,
+        "message": "No Change Request linked"
+      },
+      {
+        "id": "R-INV-I",
+        "level": 4,
+        "severity": "block",
+        "passed": true,
+        "message": "Independent"
+      },
+      {
+        "id": "R-INV-N",
+        "level": 4,
+        "severity": "warn",
+        "passed": true,
+        "message": "No implementation detail in the story"
+      },
+      {
+        "id": "R-INV-S",
+        "level": 4,
+        "severity": "warn",
+        "passed": true,
+        "message": "Size OK"
+      },
+      {
+        "id": "R-CR-02",
+        "level": 4,
+        "severity": "block",
+        "passed": false,
+        "message": "No CR to check"
+      },
+      {
+        "id": "R-CR-03",
+        "level": 4,
+        "severity": "block",
+        "passed": true,
+        "message": "Within CR scope"
+      },
+      {
+        "id": "R-CR-04",
+        "level": 4,
+        "severity": "warn",
+        "passed": true,
+        "message": "Due date fits the CR"
+      }
+    ],
+    "facts": {}
+  },
+  "impact": {
+    "event_id": "22222222-2222-4222-8222-222222222201",
+    "type": "StoryChecked",
+    "version": 1,
+    "occurred_at": "2026-11-03T09:00:00.310Z",
+    "story_key": "NORTH-1",
+    "story_updated_at": "2026-11-03T09:00:00.100Z",
+    "source_event_id": "00000000-0000-4000-8000-000000000001",
+    "source_occurred_at": "2026-11-03T09:00:00.250Z",
+    "checker": "impact",
+    "checks": [
+      {
+        "id": "I-CON-01",
+        "level": 3,
+        "severity": "block",
+        "passed": true,
+        "message": "Impacted: Checkout Service, Warehouse Service"
+      },
+      {
+        "id": "I-ADR-001",
+        "level": 3,
+        "severity": "block",
+        "passed": true,
+        "message": "ADR-001 respected"
+      },
+      {
+        "id": "I-ADR-002",
+        "level": 3,
+        "severity": "block",
+        "passed": false,
+        "message": "ADR-002: Checkout and Warehouse are both impacted. Name the event that carries the stock change."
+      },
+      {
+        "id": "I-CR-01",
+        "level": 3,
+        "severity": "block",
+        "passed": true,
+        "message": "No CR linked (see R-CR-01)"
+      },
+      {
+        "id": "I-UNK-01",
+        "level": 3,
+        "severity": "warn",
+        "passed": true,
+        "message": "No unknown components"
+      },
+      {
+        "id": "I-SIZE-01",
+        "level": 4,
+        "severity": "warn",
+        "passed": true,
+        "message": "Touches 2 container(s)"
+      },
+      {
+        "id": "I-OWN-01",
+        "level": 4,
+        "severity": "block",
+        "passed": false,
+        "message": "Name the data owner in technical notes: \"Data owner: <container>\""
+      },
+      {
+        "id": "I-EVT-01",
+        "level": 4,
+        "severity": "block",
+        "passed": false,
+        "message": "Several containers impacted; name the event (e.g. StockReserved) or API path"
+      },
+      {
+        "id": "I-API-01",
+        "level": 4,
+        "severity": "warn",
+        "passed": true,
+        "message": "No API named"
+      },
+      {
+        "id": "I-SEC-01",
+        "level": 4,
+        "severity": "warn",
+        "passed": true,
+        "message": "No sensitive data words"
+      }
+    ],
+    "facts": {
+      "impacted_containers": [
+        "checkout",
+        "warehouse"
+      ],
+      "impacted_names": [
+        "Checkout Service",
+        "Warehouse Service"
+      ],
+      "teams": [
+        "Checkout Team",
+        "Warehouse Team"
+      ],
+      "labels": []
+    }
+  }
+}

@@ -1,0 +1,128 @@
+# A hash sign starts a comment. nginx ignores these lines.
+# This is our API gateway: the only door into the Story Readiness Gate.
+# Jira, people and scripts all knock here. Internal service names stay hidden.
+# The nginx image fills in ${READINESS_API_KEY} from the environment when it starts.
+
+# Rate limits. Webhooks get one bucket per caller address.
+limit_req_zone $binary_remote_addr zone=webhooks:10m rate=100r/s;
+# The readiness API gets one bucket per API key.
+limit_req_zone $http_x_api_key zone=api:10m rate=10r/s;
+# Answer 429 "too many requests" when a bucket overflows.
+limit_req_status 429;
+
+# Is the caller's X-Api-Key the one we expect? 1 means yes, 0 means no.
+map $http_x_api_key $api_key_ok {
+  default 0;
+  "${READINESS_API_KEY}" 1;
+}
+
+# Short names for the services behind the door, on the private Docker network.
+upstream intake_svc {
+  server intake:3000;
+}
+upstream reporter_svc {
+  server reporter:3000;
+}
+
+# One JSON line per request, like every other log in this system.
+log_format readiness_json escape=json '{"ts":"$time_iso8601","service":"gateway","request_id":"$request_id","method":"$request_method","path":"$uri","status":"$status","duration_s":"$request_time","upstream":"$upstream_addr"}';
+
+server {
+  # Listen on the normal web port inside this container.
+  listen 80;
+
+  # Write the JSON log lines to the container log.
+  access_log /dev/stdout readiness_json;
+
+  # Refuse request bodies bigger than 1 megabyte.
+  client_max_body_size 1m;
+
+  # Every answer we write ourselves is JSON.
+  default_type application/json;
+
+  # Pass the request id on, so every service logs the same id for one call.
+  proxy_set_header X-Request-Id $request_id;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+
+  # Fail fast. Never hold a caller for long while a service is dead.
+  proxy_connect_timeout 2s;
+  proxy_read_timeout 5s;
+
+  # Turn "service down" errors into a clear JSON answer.
+  proxy_intercept_errors on;
+  error_page 502 504 = @service_down;
+  error_page 429 = @rate_limited;
+
+  # NOTE: nginx only keeps add_header lines from the innermost block that has any,
+  # so every location below repeats X-Request-Id and X-Readiness-Route.
+
+  # The gateway's own liveness check.
+  location = /health {
+    add_header X-Request-Id $request_id always;
+    add_header X-Readiness-Route "gateway" always;
+    return 200 '{"status":"ok","service":"gateway"}';
+  }
+
+  # Jira webhooks. Jira signs them; Intake checks the signature.
+  # The live route lives in its own file so Day 5 can pause it with one reload.
+  location = /webhook {
+    include /etc/nginx/routes/webhook-route.conf;
+  }
+
+  # Read one story's readiness. Needs an API key.
+  location ~ ^/v1/stories/[A-Z][A-Z0-9]*-[0-9]+/readiness$ {
+    add_header X-Request-Id $request_id always;
+    add_header X-Readiness-Route "reporter" always;
+    if ($api_key_ok = 0) {
+      return 401 '{"error":"invalid_api_key","message":"Send a valid X-Api-Key header","request_id":"$request_id"}';
+    }
+    limit_req zone=api burst=20 nodelay;
+    proxy_pass http://reporter_svc;
+  }
+
+  # Ask for one story to be checked again. POST only. Needs an API key.
+  location ~ ^/v1/stories/[A-Z][A-Z0-9]*-[0-9]+/recheck$ {
+    add_header X-Request-Id $request_id always;
+    add_header X-Readiness-Route "intake" always;
+    if ($request_method != POST) {
+      return 405 '{"error":"method_not_allowed","message":"Use POST","request_id":"$request_id"}';
+    }
+    if ($api_key_ok = 0) {
+      return 401 '{"error":"invalid_api_key","message":"Send a valid X-Api-Key header","request_id":"$request_id"}';
+    }
+    limit_req zone=api burst=20 nodelay;
+    proxy_pass http://intake_svc;
+  }
+
+  # Readiness of the two services callers depend on. No key needed: it says nothing private.
+  location = /v1/status/intake {
+    add_header X-Request-Id $request_id always;
+    add_header X-Readiness-Route "intake" always;
+    proxy_pass http://intake_svc/ready;
+  }
+  location = /v1/status/reporter {
+    add_header X-Request-Id $request_id always;
+    add_header X-Readiness-Route "reporter" always;
+    proxy_pass http://reporter_svc/ready;
+  }
+
+  # Anything else does not exist. Say so in JSON, never with an HTML page.
+  location / {
+    add_header X-Request-Id $request_id always;
+    add_header X-Readiness-Route "none" always;
+    return 404 '{"error":"route_not_found","message":"No such route on the readiness gateway","request_id":"$request_id"}';
+  }
+
+  # The JSON answers used by error_page above.
+  location @service_down {
+    add_header X-Request-Id $request_id always;
+    add_header X-Readiness-Route "none" always;
+    return 502 '{"error":"service_unavailable","message":"A readiness service is not answering. Retry in a minute.","request_id":"$request_id"}';
+  }
+  location @rate_limited {
+    add_header X-Request-Id $request_id always;
+    add_header X-Readiness-Route "none" always;
+    return 429 '{"error":"rate_limited","message":"Too many requests. Wait and retry.","request_id":"$request_id"}';
+  }
+}

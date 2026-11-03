@@ -1,0 +1,12 @@
+# Owned by the Impact service only (ADR-001).
+# Keys are container ids from architecture/containers.puml.
+# A keyword ending in * matches any word that starts with it.
+version: 1
+containers:
+  catalog:   [catalog, product*, sku*, price*, listing*]
+  checkout:  [checkout, order*, payment*, pay, paid, basket]
+  warehouse: [warehouse, stock*, inventor*, reserv*, "pick list", packing]
+  core:      [northlinecore, legacy, monolith]
+  gateway:   [gateway, routing]
+security_words: [payment*, card*, password*, token*, "personal data", iban, "national id"]
+max_containers: 2

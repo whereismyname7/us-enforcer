@@ -1,0 +1,56 @@
+' A single quote starts a comment. PlantUML ignores these lines.
+@startuml containers
+
+' Load the C4 shapes for a Level 2 container diagram.
+' The angle brackets take it from the library inside PlantUML, so no internet is needed.
+!include <C4/C4_Container>
+
+' The title tells the reader which zoom level they are looking at.
+title Northline Shop - Containers (C4 Level 2), target state
+
+' Put a small legend at the bottom explaining the colours.
+LAYOUT_WITH_LEGEND()
+
+' The people are the same as on Level 1. We keep them for context.
+Person(shopper, "Shopper", "Buys home products")
+Person(warehouse_staff, "Warehouse Staff", "Picks and packs orders")
+
+' A System_Boundary draws a dotted line around everything we own.
+System_Boundary(northline, "Northline Shop") {
+
+  ' A Container is one separately running piece of software.
+  ' The parts are: id, name, technology, description.
+  Container(gateway, "Gateway", "nginx", "Decides which system answers each request. Old paths go to the old system.")
+
+  Container(core, "NorthlineCore", "PHP monolith, 2011", "Still handles cart, shipping and everything not yet moved out")
+
+  Container(catalog, "Catalog Service", "Node.js and Express", "Answers questions about products. Owns the product data.")
+
+  Container(checkout, "Checkout Service", "Node.js", "Takes payment and publishes an event when money is captured")
+
+  Container(warehouse, "Warehouse Service", "Node.js", "Listens for payment events and reduces the stock count")
+
+  ' ContainerDb draws the same box shaped like a cylinder, for data stores.
+  ContainerDb(catalog_db, "Catalog Data", "In-memory for the lab", "Product names, prices and stock")
+
+  ContainerDb(events, "Event Log", "Redpanda, Kafka protocol", "A notebook of things that happened. Only new lines are added.")
+
+  ContainerDb(sessions, "Session Store", "Redis", "Shopper session data, shared by every copy of a service")
+}
+
+' A System_Ext is a system somebody else owns.
+System_Ext(payment_gateway, "Payment Gateway", "Charges the card")
+
+' Rel draws an arrow. The last value is the technology used for the call.
+Rel(shopper, gateway, "Uses the shop", "HTTPS")
+Rel(warehouse_staff, core, "Reads the pick list", "HTTPS")
+Rel(gateway, catalog, "Routes /v1/items/ to here", "HTTP")
+Rel(gateway, core, "Routes everything else to here", "HTTP")
+Rel(catalog, catalog_db, "Reads and writes. Nobody else may.", "in process")
+Rel(catalog, sessions, "Stores and reads session data", "Redis protocol")
+Rel(checkout, payment_gateway, "Asks to charge the card", "HTTPS")
+Rel(checkout, events, "Writes PaymentCaptured", "Kafka protocol")
+Rel(warehouse, events, "Reads PaymentCaptured", "Kafka protocol")
+
+' Close the diagram.
+@enduml

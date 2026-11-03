@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://story-readiness-gate.local/events/StoryChanged.v1.schema.json",
+  "title": "StoryChanged v1",
+  "description": "A story's content, links or CR changed. Published by Intake on readiness.story-changes, keyed by story_key.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "type", "version", "occurred_at", "story_key", "story_updated_at", "trigger", "story", "change_requests"],
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid", "description": "Unique per event. Consumers use it to spot repeats." },
+    "type": { "const": "StoryChanged" },
+    "version": { "const": 1 },
+    "occurred_at": { "type": "string", "format": "date-time", "description": "When Intake published it. Later means fresher data." },
+    "story_key": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]+$", "examples": ["NORTH-1"] },
+    "story_updated_at": { "type": "string", "format": "date-time", "description": "The story's fields.updated when Intake read it." },
+    "trigger": { "enum": ["story_created", "story_updated", "links_changed", "cr_changed", "recheck"], "description": "Why it was published." },
+    "story": {
+      "type": "object",
+      "description": "The story, translated by Intake (the anti-corruption layer).",
+      "required": ["summary", "as_a", "i_want", "so_that", "acceptance_criteria", "technical_notes", "due_date", "status", "links"],
+      "properties": {
+        "summary": { "type": "string" },
+        "as_a": { "type": "string" },
+        "i_want": { "type": "string" },
+        "so_that": { "type": "string" },
+        "acceptance_criteria": { "type": "string", "description": "One line per criterion." },
+        "technical_notes": { "type": "string" },
+        "due_date": { "type": ["string", "null"], "format": "date" },
+        "status": { "type": "string" },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["relation", "key", "issue_type", "status"],
+            "properties": {
+              "relation": { "enum": ["implements", "is_implemented_by", "blocks", "is_blocked_by"] },
+              "key": { "type": "string" },
+              "issue_type": { "type": "string" },
+              "status": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "change_requests": {
+      "type": "array",
+      "description": "Every CR the story implements, read fresh from Jira.",
+      "items": {
+        "type": "object",
+        "required": ["key", "status", "impacted_systems", "in_scope", "out_of_scope", "target_date", "updated_at"],
+        "properties": {
+          "key": { "type": "string" },
+          "status": { "type": "string" },
+          "impacted_systems": { "type": "array", "items": { "type": "string" } },
+          "in_scope": { "type": "array", "items": { "type": "string" } },
+          "out_of_scope": { "type": "array", "items": { "type": "string" } },
+          "target_date": { "type": ["string", "null"], "format": "date" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

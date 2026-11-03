@@ -1,0 +1,194 @@
+# Every container in the Story Readiness Gate. Start the whole system with:
+#   docker compose up -d --build --wait
+# "name" fixes the Docker network name to story-readiness-gate_default.
+name: story-readiness-gate
+
+# The health check every Node.js service shares. A YAML anchor lets us write it once.
+x-node-health: &node-health
+  test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+  interval: 5s
+  timeout: 3s
+  retries: 30
+  start_period: 5s
+
+services:
+
+  # The event log. Same image and flags as Lab2, but only the internal listener,
+  # so it never clashes with Lab2's Redpanda on laptop port 9092.
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=INTERNAL://0.0.0.0:29092
+      - --advertise-kafka-addr=INTERNAL://redpanda:29092
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  # Shared store for partial results, grades and the outbox. Owned by Reporter.
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  # Our stand-in for Jira (ADR-008). Laptop port 9000.
+  jira-sim:
+    build: ./simulator/jira-sim
+    ports:
+      - "9000:3000"
+    environment:
+      PORT: "3000"
+      WEBHOOK_URL: "http://gateway/webhook"
+      WEBHOOK_SECRET: "${WEBHOOK_SECRET:-dev-only-change-me}"
+      BOT_ACCOUNT: "story-readiness-bot"
+      OVERRIDE_ROLES: "architect,product-owner"
+    healthcheck: *node-health
+    restart: unless-stopped
+
+  # The only door into our system (ADR-009). Laptop port 9001.
+  # The nginx image fills ${READINESS_API_KEY} into the template when it starts.
+  gateway:
+    image: nginx:alpine
+    ports:
+      - "9001:80"
+    environment:
+      READINESS_API_KEY: "${READINESS_API_KEY:-dev-only-api-key}"
+    volumes:
+      - ./gateway/templates:/etc/nginx/templates:ro
+      - ./gateway/routes:/etc/nginx/routes:ro
+    depends_on:
+      intake:
+        condition: service_healthy
+      reporter:
+        condition: service_healthy
+    # 127.0.0.1, not localhost: inside the container localhost is IPv6 ::1 first, and nginx listens on IPv4 only.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  # Service 1: receives Jira webhooks and publishes StoryChanged.
+  intake:
+    build: ./services/intake
+    environment:
+      PORT: "3000"
+      KAFKA_BROKER: "redpanda:29092"
+      JIRA_URL: "http://jira-sim:3000"
+      JIRA_TIMEOUT_MS: "2000"
+      WEBHOOK_SECRET: "${WEBHOOK_SECRET:-dev-only-change-me}"
+      BOT_ACCOUNT: "story-readiness-bot"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      jira-sim:
+        condition: service_healthy
+    healthcheck: *node-health
+    restart: unless-stopped
+
+  # Service 2: template, acceptance criteria, wording, INVEST and CR checks.
+  rules:
+    build: ./services/rules
+    environment:
+      PORT: "3000"
+      KAFKA_BROKER: "redpanda:29092"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck: *node-health
+    restart: unless-stopped
+
+  # Service 3: C4, ADR, CR impact and delivery checks. Reads the target architecture.
+  impact:
+    build: ./services/impact
+    environment:
+      PORT: "3000"
+      KAFKA_BROKER: "redpanda:29092"
+      ARCHITECTURE_DIR: "/architecture"
+    volumes:
+      - ./architecture:/architecture:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck: *node-health
+    restart: unless-stopped
+
+  # Service 4: combines results into L0-L4 and writes them back to Jira.
+  reporter:
+    build: ./services/reporter
+    environment:
+      PORT: "3000"
+      KAFKA_BROKER: "redpanda:29092"
+      REDIS_URL: "redis://redis:6379"
+      JIRA_URL: "http://jira-sim:3000"
+      JIRA_TIMEOUT_MS: "2000"
+      BOT_ACCOUNT: "story-readiness-bot"
+      BREAKER_THRESHOLD: "3"
+      BREAKER_COOLDOWN_MS: "10000"
+      OUTBOX_RETRY_MS: "5000"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      jira-sim:
+        condition: service_healthy
+    healthcheck: *node-health
+    restart: unless-stopped
+
+  # ---- Tools. Started by hand only, like Lab2's checkout profile. ----
+
+  # End-to-end test: docker compose run --rm smoke
+  smoke:
+    image: node:20-alpine
+    working_dir: /work
+    volumes:
+      - ./:/work:ro
+    environment:
+      JIRA_URL: "http://jira-sim:3000"
+      GATEWAY_URL: "http://gateway"
+      READINESS_API_KEY: "${READINESS_API_KEY:-dev-only-api-key}"
+    command: ["node", "tests/smoke/smoke.js"]
+    profiles: ["tools"]
+
+  # Architecture rules: docker compose run --rm fitness
+  fitness:
+    image: node:20-alpine
+    working_dir: /work
+    volumes:
+      - ./:/work:ro
+    command: ["node", "fitness/run-all.js"]
+    profiles: ["tools"]
+
+  # Load test: docker compose run --rm k6
+  k6:
+    image: grafana/k6
+    volumes:
+      - ./load:/scripts:ro
+    environment:
+      JIRA_URL: "http://jira-sim:3000"
+    command: ["run", "/scripts/story-burst.js"]
+    profiles: ["tools"]
+
+  # Diagrams as code: docker compose run --rm diagrams
+  diagrams:
+    image: plantuml/plantuml
+    working_dir: /work
+    volumes:
+      - ./:/work
+    command: ["-tpng", "docs/context.puml", "docs/containers.puml", "architecture/containers.puml"]
+    profiles: ["tools"]

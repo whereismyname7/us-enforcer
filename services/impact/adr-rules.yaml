@@ -1,0 +1,12 @@
+# Owned by the Impact service only. One entry per Northline ADR we can check in text.
+version: 1
+rules:
+  - id: ADR-001
+    source: architecture/adr/adr-001-catalog-owns-data.md
+    forbid_pattern: '\b(read|reads|query|queries|join|joins|access|accesses|update|updates)\b[^.]{0,40}\b(catalog|product)\b[^.]{0,20}\b(database|db|table|tables)\b'
+    message: "ADR-001: only Catalog may touch product data. Call GET /v1/items/{id} instead."
+  - id: ADR-002
+    source: architecture/adr/adr-002-events-for-stock.md
+    when_containers: [checkout, warehouse]
+    must_mention_any: [event]
+    message: "ADR-002: Checkout and Warehouse are both impacted. Name the event that carries the stock change."

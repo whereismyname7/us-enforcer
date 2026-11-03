@@ -1,0 +1,102 @@
+# A hash sign starts a comment in YAML. The computer ignores these lines.
+# This line says which version of the OpenAPI standard we are using.
+openapi: 3.0.3
+
+# General information about this API, for humans reading it.
+info:
+  # The name shown at the top of any documentation tool.
+  title: Northline Catalog API
+  # The version of this contract, not of the code. Bump it when the shape changes.
+  version: 1.0.0
+  # A short sentence saying what this API is for.
+  description: Read-only questions about the products Northline sells.
+
+# Where the API can be reached.
+servers:
+  # The address used in the classroom lab.
+  - url: http://localhost:8080
+    description: Local lab machine
+
+# Every door this API has. Each door is called a path.
+paths:
+  # This door answers questions about one product. {id} is a placeholder for the sku.
+  /v1/items/{id}:
+    # GET means "read something". It must never change anything.
+    get:
+      # A short id for this operation, used by code generators.
+      operationId: getItemById
+      # One line telling a human what this door does.
+      summary: Get one product by its sku
+      # The values the caller must send.
+      parameters:
+        # The name of the value, exactly as it appears in the path.
+        - name: id
+          # It comes from the path itself, not from a query string.
+          in: path
+          # The caller cannot leave it out.
+          required: true
+          # A sentence explaining it.
+          description: The permanent product code, for example NL-LAMP-07
+          # What kind of value it is.
+          schema:
+            type: string
+      # Everything this door can answer.
+      responses:
+        # 200 means "here is your answer, all good".
+        "200":
+          description: The product was found
+          content:
+            application/json:
+              schema:
+                type: object
+                # These fields are always present in a 200 answer.
+                required: [sku, name, price_sar, in_stock]
+                properties:
+                  sku:
+                    type: string
+                    example: NL-LAMP-07
+                  name:
+                    type: string
+                    example: Riyadh Reading Lamp
+                  price_sar:
+                    type: number
+                    description: Catalog list price in Saudi Riyal, excluding VAT
+                    example: 180.00
+                  in_stock:
+                    type: integer
+                    description: How many are on the shelf right now
+                    example: 42
+        # 404 means "I understood you, but that thing does not exist".
+        "404":
+          description: No product has that sku
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, message]
+                properties:
+                  error:
+                    type: string
+                    # A fixed machine-readable code. Callers match on this, not on the message.
+                    enum: [item_not_found]
+                    example: item_not_found
+                  message:
+                    type: string
+                    example: No item with sku NL-NOPE-99
+
+  # A second door. Monitoring tools call this to ask "are you alive?".
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness check used by monitoring
+      responses:
+        "200":
+          description: The service is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok

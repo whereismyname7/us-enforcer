@@ -1,0 +1,13 @@
+{
+  "key": "NORTH-3",
+  "fields": {
+    "project": { "key": "NORTH" },
+    "issuetype": { "name": "Story" },
+    "summary": "[Catalog] Show product badge",
+    "asA": "shopper",
+    "iWant": "to see a badge on the product page",
+    "soThat": "I notice new arrivals",
+    "acceptanceCriteria": "Given a product is new, When I open its page, Then I see a New badge.\nGiven a product is not new, When I open its page, Then no badge is shown.",
+    "technicalNotes": "Data owner: Catalog."
+  }
+}

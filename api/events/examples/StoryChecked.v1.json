@@ -1,0 +1,21 @@
+{
+  "event_id": "c3d1a9e4-7b62-4c0e-8f15-2a9e6d4b7f01",
+  "type": "StoryChecked",
+  "version": 1,
+  "occurred_at": "2026-11-03T09:00:00.450Z",
+  "story_key": "NORTH-1",
+  "story_updated_at": "2026-11-03T09:00:00.250Z",
+  "source_event_id": "5b0f6c1e-2d7a-4f43-9a51-0c6b8f1d2e10",
+  "source_occurred_at": "2026-11-03T09:00:00.400Z",
+  "checker": "impact",
+  "checks": [
+    { "id": "I-CON-01", "level": 3, "severity": "block", "passed": true, "message": "Impacted: Checkout Service, Warehouse Service" },
+    { "id": "I-CR-01", "level": 3, "severity": "block", "passed": false, "message": "Warehouse Service impacted but not declared by CR-12" }
+  ],
+  "facts": {
+    "impacted_containers": ["checkout", "warehouse"],
+    "impacted_names": ["Checkout Service", "Warehouse Service"],
+    "teams": ["Checkout Team", "Warehouse Team"],
+    "labels": []
+  }
+}

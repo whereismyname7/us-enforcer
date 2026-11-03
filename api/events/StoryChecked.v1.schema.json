@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://story-readiness-gate.local/events/StoryChecked.v1.schema.json",
+  "title": "StoryChecked v1",
+  "description": "One checker finished checking one StoryChanged. Published by Rules and by Impact on readiness.check-results, keyed by story_key.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "type", "version", "occurred_at", "story_key", "story_updated_at", "source_event_id", "source_occurred_at", "checker", "checks", "facts"],
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid", "description": "Unique per event. The Reporter's seen: key uses it." },
+    "type": { "const": "StoryChecked" },
+    "version": { "const": 1 },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "story_key": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]+$" },
+    "story_updated_at": { "type": "string", "format": "date-time", "description": "Copied from the StoryChanged." },
+    "source_event_id": { "type": "string", "format": "uuid", "description": "The StoryChanged event_id. The Reporter groups results by it." },
+    "source_occurred_at": { "type": "string", "format": "date-time", "description": "The StoryChanged occurred_at. The Reporter drops anything older than the newest it has seen." },
+    "checker": { "enum": ["rules", "impact"] },
+    "checks": {
+      "type": "array",
+      "description": "Rules always sends 14; Impact sends 8 plus one per ADR rule.",
+      "items": {
+        "type": "object",
+        "required": ["id", "level", "severity", "passed", "message"],
+        "properties": {
+          "id": { "type": "string", "examples": ["R-AC-01", "I-CR-01"] },
+          "level": { "type": "integer", "minimum": 1, "maximum": 4 },
+          "severity": { "enum": ["block", "warn"] },
+          "passed": { "type": "boolean" },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "facts": {
+      "type": "object",
+      "description": "{} from rules; from impact the impacted containers, their names, the teams and any labels.",
+      "properties": {
+        "impacted_containers": { "type": "array", "items": { "type": "string" } },
+        "impacted_names": { "type": "array", "items": { "type": "string" } },
+        "teams": { "type": "array", "items": { "type": "string" } },
+        "labels": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

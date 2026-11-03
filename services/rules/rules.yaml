@@ -1,0 +1,24 @@
+# Owned by the Rules service only (ADR-001).
+version: 1
+
+template:
+  # [Area] then a short phrase, e.g. "[Cart] Reserve stock".
+  title_pattern: '^\[[A-Za-z][A-Za-z ]{1,30}\] \S.{2,80}$'
+  required_fields: [as_a, i_want, so_that]
+
+acceptance:
+  # Every non-empty line of acceptance_criteria is one criterion.
+  gwt_pattern: '\bgiven\b.+\bwhen\b.+\bthen\b'
+  negative_words: [not, "no", fail, fails, failed, error, invalid, unavailable, "out of stock", out-of-stock, expired, denied, rejected, empty, timeout]
+  max_criteria: 6
+
+vague_words: [quickly, fast, easy, easily, simple, user-friendly, intuitive, many, some, several, appropriate, "as soon as possible", asap, etc, flexible, robust, seamless]
+
+open_questions: [TBD, TBC, "to be confirmed", "to be decided", "check with", "?"]
+
+invest:
+  dependency_phrases: ['after .{1,40} is done', 'depends on', 'blocked by', 'once .{1,40} is ready']
+  implementation_words: [redis, sql, kafka, mongodb, react, "add a column", "database table"]
+
+change_request:
+  approved_status: Approved
