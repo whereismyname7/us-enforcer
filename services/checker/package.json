@@ -1,0 +1,11 @@
+{
+  "name": "srg-checker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Checker service. Checks a story against the rules and the target architecture.",
+  "main": "consumer.js",
+  "dependencies": {
+    "js-yaml": "4.1.0",
+    "kafkajs": "2.2.4"
+  }
+}

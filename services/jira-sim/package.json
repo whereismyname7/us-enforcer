@@ -1,0 +1,10 @@
+{
+  "name": "srg-jira-sim",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A small stand-in for Jira: stories, CRs, the L4 gate and the developer board.",
+  "main": "server.js",
+  "dependencies": {
+    "express": "4.19.2"
+  }
+}

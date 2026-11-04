@@ -1,0 +1,15 @@
+' The target system's C4 containers. The Checker checks stories against these boxes.
+@startuml target-containers
+!include <C4/C4_Container>
+
+title Northline Shop - Containers (the system the stories are about)
+
+System_Boundary(northline, "Northline Shop") {
+  Container(gateway, "Gateway", "nginx", "Decides which system answers each request")
+  Container(core, "NorthlineCore", "PHP monolith, 2011", "Everything not yet moved out")
+  Container(catalog, "Catalog Service", "Node.js", "Owns the product data")
+  Container(checkout, "Checkout Service", "Node.js", "Takes payment and publishes an event")
+  Container(warehouse, "Warehouse Service", "Node.js", "Listens for events and reduces stock")
+}
+
+@enduml

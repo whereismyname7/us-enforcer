@@ -1,7 +1,0 @@
-version: 1
-teams:
-  catalog: Catalog Team
-  checkout: Checkout Team
-  warehouse: Warehouse Team
-  core: Core Platform Team
-  gateway: Core Platform Team

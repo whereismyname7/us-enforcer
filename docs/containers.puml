@@ -1,60 +1,31 @@
-' A single quote starts a comment. PlantUML ignores these lines.
 @startuml containers
-
-' Load the C4 shapes for a Level 2 container diagram.
-' The angle brackets take it from the library inside PlantUML, so no internet is needed.
 !include <C4/C4_Container>
 
-' The title tells the reader which zoom level they are looking at.
 title Story Readiness Gate - Containers (C4 Level 2)
-
-' Put a small legend at the bottom explaining the colours.
 LAYOUT_WITH_LEGEND()
 
-' The people are the same as on Level 1. We keep them for context.
 Person(ba, "Business Analyst", "Writes stories and CRs")
 Person(developer, "Developer", "Picks L4 stories")
+System_Ext(jira, "Jira", "Simulated by jira-sim: stories, CRs, the L4 gate, the board")
 
-' Systems somebody else owns.
-System_Ext(jira, "Jira", "Simulated by jira-sim in v1: stories, CRs, the L4 gate, the board")
-System_Ext(arch_files, "Northline architecture files", "containers.puml, openapi.yaml, ADRs")
-
-' A System_Boundary draws a dotted line around everything we own.
 System_Boundary(srg, "Story Readiness Gate") {
-
-  ' A Container is one separately running piece of software.
-  ' The parts are: id, name, technology, description.
-  Container(gateway, "Gateway", "nginx", "The only door in: routes, API key, rate limits, request ids, JSON errors. No business rules.")
-
-  Container(intake, "Intake", "Node.js and Express", "Checks webhook signatures, translates Jira fields, adds CR data, publishes StoryChanged")
-
-  Container(rules, "Rules", "Node.js and Express", "Template, acceptance criteria, wording, INVEST and CR checks. Owns rules.yaml")
-
-  Container(impact, "Impact", "Node.js and Express", "C4, ADR, CR impact and delivery checks. Owns the impact map, ADR rules and owners")
-
-  Container(reporter, "Reporter", "Node.js and Express", "Combines results into L0-L4, writes it to Jira, readiness API. Timeout, breaker, outbox")
-
-  ' ContainerDb draws the same box shaped like a cylinder, for data stores.
+  Container(gateway, "Gateway", "nginx", "The only door in. Routes and API key. No business rules.")
+  Container(intake, "Intake", "Node.js", "Anti-corruption layer: translates Jira fields, adds CR data, publishes StoryChanged")
+  Container(checker, "Checker", "Node.js", "Checks a story against the rules and the target's containers and ADRs. Owns rules.yaml")
+  Container(reporter, "Reporter", "Node.js", "Turns results into L0-L4 and is the only writer to Jira")
   ContainerDb(events, "Event Log", "Redpanda, Kafka protocol", "readiness.story-changes and readiness.check-results")
-
-  ContainerDb(store, "Store", "Redis", "Partial results, grades and the outbox. Owned by Reporter.")
 }
 
-' Rel draws an arrow. The last value is the technology used for the call.
 Rel(ba, jira, "Writes stories and CRs", "browser")
 Rel(developer, jira, "Reads the board", "browser")
-Rel(jira, gateway, "POST /webhook, signed", "HTTP, X-Hub-Signature")
 Rel(developer, gateway, "GET /v1/stories/{key}/readiness", "HTTP, X-Api-Key")
-Rel(gateway, intake, "Routes /webhook and /v1/stories/{key}/recheck", "HTTP")
-Rel(gateway, reporter, "Routes /v1/stories/{key}/readiness", "HTTP")
-Rel(intake, jira, "GET issue, POST issueLink", "Jira REST, 2 s timeout")
+Rel(jira, gateway, "POST /webhook", "HTTP")
+Rel(gateway, intake, "Routes /webhook", "HTTP")
+Rel(gateway, reporter, "Routes the readiness API", "HTTP")
+Rel(intake, jira, "Reads the story and its CR", "Jira REST")
 Rel(intake, events, "Writes StoryChanged", "Kafka protocol")
-Rel(rules, events, "Reads StoryChanged, writes StoryChecked", "Kafka protocol")
-Rel(impact, events, "Reads StoryChanged, writes StoryChecked", "Kafka protocol")
-Rel(impact, arch_files, "Reads at startup", "read-only volume")
+Rel(checker, events, "Reads StoryChanged, writes StoryChecked", "Kafka protocol")
 Rel(reporter, events, "Reads StoryChecked", "Kafka protocol")
-Rel(reporter, store, "Reads and writes. Nobody else may.", "Redis protocol")
-Rel(reporter, jira, "Writes readiness, comment, labels, moves back", "Jira REST as the bot, 2 s timeout")
+Rel(reporter, jira, "Writes the level and a comment", "Jira REST")
 
-' Close the diagram.
 @enduml

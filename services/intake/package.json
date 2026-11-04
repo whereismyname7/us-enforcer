@@ -2,12 +2,8 @@
   "name": "srg-intake",
   "version": "1.0.0",
   "private": true,
-  "description": "Intake service. Receives signed Jira webhooks, translates Jira fields, adds CR data and publishes StoryChanged.",
+  "description": "Intake service. Translates Jira stories and publishes StoryChanged.",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "test": "node --test"
-  },
   "dependencies": {
     "express": "4.19.2",
     "kafkajs": "2.2.4"

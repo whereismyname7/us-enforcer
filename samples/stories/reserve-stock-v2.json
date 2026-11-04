@@ -1,6 +1,0 @@
-{
-  "fields": {
-    "acceptanceCriteria": "Given an item is in my cart, When I start checkout, Then 1 unit is reserved within 2 seconds.\nGiven a reservation is 15 minutes old, When payment has not completed, Then the unit is released.\nGiven the item is out of stock, When I start checkout, Then I see an out-of-stock message.",
-    "technicalNotes": "Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse."
-  }
-}

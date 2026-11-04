@@ -1,0 +1,28 @@
+# What makes a story ready. Adding a word or an ADR rule is a config change, not a code change.
+# Owned by the Checker only. A term ending in * matches any word that starts with it.
+
+title_pattern: '^\[[A-Za-z][A-Za-z ]{1,30}\] \S.{2,80}$'
+gwt_pattern: '\bgiven\b.+\bwhen\b.+\bthen\b'
+negative_words: [not, "no", fail*, error, invalid, unavailable, "out of stock", out-of-stock, expired, denied, rejected, empty, timeout]
+vague_words: [quickly, fast, easy, simple, user-friendly, many, some, several, asap, robust, seamless]
+open_questions: [TBD, TBC, "to be confirmed", "?"]
+
+# ---- About the target system. Swap this section and target-containers.puml to check another project. ----
+
+# Keys are container ids from target-containers.puml.
+impact_keywords:
+  catalog: [catalog, product*, sku*, price*, listing*]
+  checkout: [checkout, order*, payment*, pay, paid, basket]
+  warehouse: [warehouse, stock*, inventor*, reserv*, "pick list", packing]
+  core: [northlinecore, legacy, monolith]
+  gateway: [gateway, routing]
+
+# The target's ADRs, written as checks.
+adr_rules:
+  - id: ADR-001
+    forbid_pattern: '\b(read|reads|query|queries|join|joins|access|accesses|update|updates)\b[^.]{0,40}\b(catalog|product)\b[^.]{0,20}\b(database|db|table|tables)\b'
+    message: "ADR-001: only Catalog may touch product data. Call GET /v1/items/{id} instead."
+  - id: ADR-002
+    when_containers: [checkout, warehouse]
+    must_mention_any: [event]
+    message: "ADR-002: Checkout and Warehouse are both impacted. Name the event that carries the stock change."

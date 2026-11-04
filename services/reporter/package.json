@@ -2,15 +2,10 @@
   "name": "srg-reporter",
   "version": "1.0.0",
   "private": true,
-  "description": "Reporter service. Combines the Rules and Impact results into a level L0-L4 and writes it back to Jira.",
+  "description": "Reporter service. Turns check results into a level L0-L4 and writes it back to Jira.",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "test": "node --test"
-  },
   "dependencies": {
     "express": "4.19.2",
-    "kafkajs": "2.2.4",
-    "redis": "4.7.0"
+    "kafkajs": "2.2.4"
   }
 }

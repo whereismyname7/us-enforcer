@@ -1,39 +1,20 @@
-' Everything after a single quote is a comment. PlantUML ignores it.
-' A diagram always starts with @startuml and a name. The name becomes the picture's file name.
 @startuml context
-
-' Load the C4 shapes for a Level 1 context diagram.
-' The angle brackets mean "take it from the library already inside PlantUML".
-' So this works with no internet connection.
 !include <C4/C4_Context>
 
-' Give the picture a title that a manager can read.
 title Story Readiness Gate - System Context (C4 Level 1)
-
-' Put a small legend at the bottom explaining the colours.
 LAYOUT_WITH_LEGEND()
 
-' A Person is a human being who uses the system.
-' The three parts are: short id, name on the box, description under the name.
-Person(ba, "Business Analyst", "Writes user stories and Change Requests in Jira")
-Person(developer, "Developer", "Picks L4 stories from the developer board")
-Person(architect, "Architect", "Maintains the Northline architecture files and the ADR rules")
+Person(ba, "Business Analyst", "Writes user stories and Change Requests")
+Person(developer, "Developer", "Picks L4 stories from the board")
+Person(architect, "Architect", "Maintains the rules and the target's containers")
 
-' A System is a thing we own and can change.
-System(gate, "Story Readiness Gate", "Grades every story L0 to L4 and blocks Ready for Dev until it is L4")
+System(gate, "Story Readiness Gate", "Grades every story L0 to L4 against the team's own architecture")
+System_Ext(jira, "Jira", "Stories, CRs, the workflow and the board. Simulated by jira-sim in this proof of concept.")
 
-' A System_Ext is a system somebody else owns. We cannot change it.
-System_Ext(jira, "Jira", "Stories, CRs, the workflow and the board. Simulated by jira-sim in v1.")
-System_Ext(arch_files, "Northline architecture files", "C4 containers, ADRs and OpenAPI of the system the stories are about")
-
-' Rel means relationship. It draws an arrow from the first id to the second id.
-' The text is what the arrow does, written from the caller's point of view.
 Rel(ba, jira, "Writes stories and CRs in")
-Rel(developer, jira, "Picks L4 stories from the board in")
-Rel(architect, arch_files, "Maintains")
-Rel(jira, gate, "Sends signed webhooks to", "HTTPS, HMAC-SHA256")
-Rel(gate, jira, "Reads stories and CRs, writes the level back", "Jira REST API")
-Rel(gate, arch_files, "Reads", "files, read-only")
+Rel(developer, jira, "Picks L4 stories from")
+Rel(architect, gate, "Maintains rules and architecture of")
+Rel(jira, gate, "Sends webhooks to", "HTTP")
+Rel(gate, jira, "Reads stories and CRs, writes the level and a comment", "Jira REST API")
 
-' Every diagram must be closed with @enduml.
 @enduml

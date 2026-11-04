@@ -1,129 +1,100 @@
-// The Reporter service: combines the Rules and Impact results into a level L0-L4,
-// writes it back to Jira as the bot, and keeps the latest grade for the readiness API.
-// It is the only service that writes to Jira and the only one that uses Redis.
-
-// Load express, the library that answers web requests.
+// Reporter: StoryChecked in, a level and a comment out. It is the only service that writes to Jira.
 const express = require("express");
+const { Kafka, logLevel } = require("kafkajs");
 
-// Our own parts, one job each.
-const { createStore } = require("./store");
-const { createJiraClient } = require("./jira-client");
-const { createBreaker } = require("./breaker");
-const { createOutbox } = require("./outbox");
-const { createConsumer } = require("./consumer");
-
-// A name for this service, printed in every log line.
-const SERVICE = "reporter";
-
-// The port we listen on inside the container.
-const PORT = Number(process.env.PORT || 3000);
-
-// Where the event log, Redis and Jira live, seen from inside the Docker network.
-const KAFKA_BROKER = process.env.KAFKA_BROKER || "redpanda:29092";
-const REDIS_URL = process.env.REDIS_URL || "redis://redis:6379";
 const JIRA_URL = process.env.JIRA_URL || "http://jira-sim:3000";
+const TOPIC = "readiness.check-results";
 
-// How long we wait for Jira on each call, in milliseconds.
-const JIRA_TIMEOUT_MS = Number(process.env.JIRA_TIMEOUT_MS || 2000);
+const kafka = new Kafka({ clientId: "reporter", brokers: [process.env.KAFKA_BROKER || "redpanda:29092"], logLevel: logLevel.NOTHING });
+const consumer = kafka.consumer({ groupId: "reporter-grading" });
 
-// Our own service account. Every write to Jira is made as this account.
-const BOT_ACCOUNT = process.env.BOT_ACCOUNT || "story-readiness-bot";
+// In memory for the proof of concept. Event ids we already handled, and the latest grade per story.
+const alreadyApplied = new Set();
+const grades = new Map();
+let listening = false;
 
-// The breaker opens after this many failures in a row, for this long.
-const BREAKER_THRESHOLD = Number(process.env.BREAKER_THRESHOLD || 3);
-const BREAKER_COOLDOWN_MS = Number(process.env.BREAKER_COOLDOWN_MS || 10000);
-
-// How often the outbox retries failed writes.
-const OUTBOX_RETRY_MS = Number(process.env.OUTBOX_RETRY_MS || 5000);
-
-// Print one structured log line as JSON, like every Lab2 service.
 function log(fields) {
-  const line = { ts: new Date().toISOString(), service: SERVICE, instance: process.env.HOSTNAME || "local" };
-  Object.assign(line, fields);
-  console.log(JSON.stringify(line));
+  console.log(JSON.stringify(Object.assign({ ts: new Date().toISOString(), service: "reporter" }, fields)));
 }
 
-// Wire the parts together.
-const store = createStore({ url: REDIS_URL, log: log });
-const jira = createJiraClient({ baseUrl: JIRA_URL, timeoutMs: JIRA_TIMEOUT_MS, actor: BOT_ACCOUNT });
-const breaker = createBreaker({ threshold: BREAKER_THRESHOLD, cooldownMs: BREAKER_COOLDOWN_MS, log: log });
-const outbox = createOutbox({ store: store, jira: jira, breaker: breaker, retryMs: OUTBOX_RETRY_MS, log: log });
-const consumer = createConsumer({ broker: KAFKA_BROKER, clientId: SERVICE, log: log, store: store, outbox: outbox });
+// The lowest failed level decides: a failure at L2 means the story is L1. Nothing failed means L4.
+function computeLevel(checks) {
+  const failed = checks.filter(function (c) { return !c.passed; }).map(function (c) { return c.level; });
+  return failed.length === 0 ? 4 : Math.min.apply(null, failed) - 1;
+}
 
-// Create the application object.
+// The comment a BA reads: the level and exactly what is missing.
+function buildComment(level, failed, impacted) {
+  const lines = [level === 4 ? "Story readiness: L4 of 4. Ready for development." : "Story readiness: L" + level + " of 4. Fix these to reach L4:"];
+  failed.forEach(function (c) { lines.push("- L" + c.level + " " + c.id + ": " + c.message); });
+  lines.push("", "Impacted containers: " + (impacted.join(", ") || "none found"));
+  return lines.join("\n");
+}
+
+async function handle(payload) {
+  const result = JSON.parse(payload.message.value.toString());
+  if (result.type !== "StoryChecked" || result.version !== 1) return;
+  // Idempotent: the same event twice has the same effect as once.
+  if (alreadyApplied.has(result.event_id)) {
+    log({ level: "warn", event: "duplicate_ignored", event_id: result.event_id });
+    return;
+  }
+  const level = computeLevel(result.checks);
+  const failed = result.checks.filter(function (c) { return !c.passed; }).sort(function (a, b) { return a.level - b.level; });
+  const grade = {
+    level: "L" + level,
+    missing: failed.map(function (c) { return c.id + ": " + c.message; }),
+    impacted_containers: result.impacted_containers,
+    story_updated_at: result.story_updated_at,
+    comment: buildComment(level, failed, result.impacted_containers)
+  };
+  const res = await fetch(JIRA_URL + "/rest/api/v3/issue/" + encodeURIComponent(result.story_key) + "/readiness", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(grade),
+    signal: AbortSignal.timeout(2000)
+  });
+  // Jira is in trouble: throw, so the message is not committed and Kafka delivers it again.
+  if (res.status >= 500) throw new Error("Jira answered " + res.status);
+  alreadyApplied.add(result.event_id);
+  // 409: the story changed after this check, so a newer grade is on its way. 404: the story is gone.
+  if (!res.ok) {
+    log({ level: "info", event: "grade_dropped", story_key: result.story_key, status: res.status });
+    return;
+  }
+  grades.set(result.story_key, grade);
+  // The SLI from docs/slo/readiness-slo.md: how long from the save to the grade.
+  log({ level: "info", event: "graded", story_key: result.story_key, grade_level: grade.level, lag_ms: Date.now() - Date.parse(result.story_updated_at) });
+}
+
 const app = express();
 
-// LIVENESS. "Am I alive?" It checks nothing outside this process.
+// Healthy once we are reading events.
 app.get("/health", function (req, res) {
-  res.json({ status: "ok", service: SERVICE });
+  res.status(listening ? 200 : 503).json({ status: listening ? "ok" : "starting", service: "reporter" });
 });
 
-// READINESS. Ready only when Redis answers PING and the consumer has joined its group.
-app.get("/ready", async function (req, res) {
-  // Redis first: without it we cannot grade or answer the API.
-  let redisOk = store.isReady();
-  if (redisOk) {
-    try {
-      await store.ping();
-    } catch (err) {
-      redisOk = false;
-    }
-  }
-  if (!redisOk) {
-    res.status(503).json({ ready: false, service: SERVICE, reason: "redis_not_connected" });
-    return;
-  }
-  // Then the consumer.
-  if (!consumer.isReady()) {
-    res.status(503).json({ ready: false, service: SERVICE, reason: "consumer_not_ready" });
-    return;
-  }
-  res.json({ ready: true, service: SERVICE });
+// The readiness API, reached through the gateway.
+app.get("/v1/stories/:key/readiness", function (req, res) {
+  const grade = grades.get(req.params.key);
+  if (!grade) return res.status(404).json({ error: "not_graded", message: "No grade yet for " + req.params.key });
+  res.json({ level: grade.level, missing: grade.missing, impacted_containers: grade.impacted_containers, story_updated_at: grade.story_updated_at });
 });
 
-// The readiness API: the last grade of one story. The gateway checks the API key first.
-app.get("/v1/stories/:key/readiness", async function (req, res) {
-  const requestId = req.get("X-Request-Id") || null;
-  const key = req.params.key;
-  // Without Redis we cannot answer. Say so at once instead of making the caller wait.
-  if (!store.isReady()) {
-    res.status(503).json({ error: "store_unavailable", message: "The grade store is not answering. Retry in a minute.", request_id: requestId });
-    return;
-  }
-  try {
-    const grade = await store.getGrade(key);
-    if (!grade) {
-      res.status(404).json({ error: "not_graded", message: "No grade yet for " + key, request_id: requestId });
-      return;
-    }
-    res.json(grade);
-  } catch (err) {
-    log({ level: "error", event: "grade_read_failed", story_key: key, request_id: requestId, message: String(err.message) });
-    res.status(503).json({ error: "store_unavailable", message: "The grade store is not answering. Retry in a minute.", request_id: requestId });
-  }
-});
+async function main() {
+  app.listen(3000);
+  const admin = kafka.admin();
+  await admin.connect();
+  await admin.createTopics({ waitForLeaders: true, topics: [{ topic: TOPIC, numPartitions: 3, replicationFactor: 1 }] }).catch(function () {});
+  await admin.disconnect();
+  await consumer.connect();
+  await consumer.subscribe({ topic: TOPIC, fromBeginning: true });
+  await consumer.run({ eachMessage: handle });
+  listening = true;
+  log({ level: "info", event: "listening", topic: TOPIC });
+}
 
-// Anything else does not exist. Say so in JSON.
-app.use(function (req, res) {
-  res.status(404).json({ error: "route_not_found", message: "No such route on reporter", request_id: req.get("X-Request-Id") || null });
-});
-
-// Start listening first, so /health answers while Redis and Kafka are still starting.
-const server = app.listen(PORT, async function () {
-  log({ level: "info", event: "started", port: PORT });
-  // Then connect, patiently. /ready stays 503 until both are up.
-  await store.connect();
-  outbox.start();
-  consumer.start();
-});
-
-// Graceful stop: stop the outbox, disconnect Kafka and Redis, then exit 0.
-process.on("SIGTERM", async function () {
-  log({ level: "info", event: "stopping" });
-  outbox.stop();
-  await consumer.stop();
-  await store.quit();
-  server.close(function () {
-    process.exit(0);
-  });
+main().catch(function (err) {
+  log({ level: "error", event: "failed", message: String(err.message) });
+  process.exit(1);
 });

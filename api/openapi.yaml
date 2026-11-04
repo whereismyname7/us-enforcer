@@ -1,81 +1,119 @@
-# A hash sign starts a comment in YAML. The computer ignores these lines.
-# The public API of our gateway, the only door into the Story Readiness Gate.
-# Only the two calls people use are listed. The gateway also takes Jira's signed webhooks on POST /webhook,
-# and answers /health and /v1/status/intake|reporter for monitoring.
 openapi: 3.0.3
-
 info:
-  title: Story Readiness Gate API
-  version: 1.0.0
-  description: >
-    Read a story's last grade, or ask for it to be checked again. Both need the X-Api-Key header
-    (already filled in Swagger UI). Errors are JSON: {"error", "message", "request_id"}.
-
+  title: Story Readiness Gate
+  version: "1.0"
+  description: |
+    **Try the flow in order:** create CR-12, create a story (it becomes NORTH-1), read it, try to move it (refused),
+    add Warehouse to the CR, fix the story, read it again (L4), move it, see the board.
+    Grading takes about a second, and the story's `comments` say what is missing. POST /admin/reset starts over.
 servers:
-  - url: http://localhost:9001
-    description: Local machine
-
-tags:
-  - name: Readiness
-
+  - url: http://localhost:9000
+    description: Jira simulator
 paths:
-
-  # The last grade of one story.
-  /v1/stories/{key}/readiness:
-    get:
-      tags: ["Readiness"]
-      operationId: getStoryReadiness
-      summary: The last grade of one story
-      security:
-        - ReadinessApiKey: []
-      parameters:
-        - $ref: "#/components/parameters/StoryKey"
-      responses:
-        "200":
-          description: The grade
-          content:
-            application/json:
-              example: { "state": "Graded", "level": 4, "failed": [], "warnings": [{ "id": "I-SEC-01", "level": 4, "message": "Needs security review: payment" }], "teams": ["Checkout Team", "Warehouse Team"] }
-        "401":
-          description: invalid_api_key
-        "404":
-          description: not_graded
-
-  # Ask for one story to be checked again.
-  /v1/stories/{key}/recheck:
+  /rest/api/v3/issue:
     post:
-      tags: ["Readiness"]
-      operationId: recheckStory
-      summary: Check one story again
-      security:
-        - ReadinessApiKey: []
-      parameters:
-        - $ref: "#/components/parameters/StoryKey"
+      summary: 1. Create a CR or a story
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+            examples:
+              cr:
+                summary: "First: CR-12"
+                value:
+                  key: CR-12
+                  fields:
+                    issuetype: { name: Change Request }
+                    summary: Customers can reserve stock during checkout
+                    status: Approved
+                    impactedSystems: [Checkout]
+                    outOfScope: [discount, delivery fee]
+              weakStory:
+                summary: "Then: a weak story, linked to CR-12"
+                value:
+                  fields:
+                    project: { key: NORTH }
+                    issuetype: { name: Story }
+                    summary: "[Cart] Reserve stock"
+                    asA: customer
+                    iWant: my items reserved
+                    soThat: they don't sell out
+                    acceptanceCriteria: Stock should be reserved quickly at checkout. Reservation time TBD.
+                    crKey: CR-12
       responses:
-        "202":
-          description: A new check was started
-          content:
-            application/json:
-              example: { "published": 1, "event_id": "3922afb6-9de3-4738-b533-35e6da7917a1" }
-        "401":
-          description: invalid_api_key
-        "404":
-          description: story_not_found
-
-components:
-  # The API key, sent in the X-Api-Key header. Its value comes from READINESS_API_KEY.
-  securitySchemes:
-    ReadinessApiKey:
-      type: apiKey
-      in: header
-      name: X-Api-Key
-  parameters:
-    # A Jira story key, for example NORTH-1. Anything else is a 404 from the gateway.
-    StoryKey:
-      name: key
-      in: path
-      required: true
-      schema:
-        type: string
-        pattern: "^[A-Z][A-Z0-9]*-[0-9]+$"
-        example: NORTH-1
+        "201": { description: Created }
+        "400": { description: Unknown issue type }
+        "409": { description: The key already exists }
+  /rest/api/v3/issue/{key}:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string }, example: NORTH-1 }
+    get:
+      summary: 2. Read a story, with its level, what is missing and its comments
+      responses:
+        "200": { description: The issue }
+        "404": { description: Not found }
+    put:
+      summary: 4. Edit a story or a CR. The story goes back to Pending and is checked again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+            examples:
+              declareWarehouse:
+                summary: "For key CR-12: declare Warehouse"
+                value:
+                  fields:
+                    impactedSystems: [Checkout, Warehouse]
+              fixedStory:
+                summary: "For key NORTH-1: fix the story (reaches L4)"
+                value:
+                  fields:
+                    acceptanceCriteria: "Given an item is in my cart, When I start checkout, Then 1 unit is reserved within 2 seconds.\nGiven the item is out of stock, When I start checkout, Then I see an out-of-stock message."
+                    technicalNotes: "Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse."
+              scopeCreep:
+                summary: "For key NORTH-1: add out-of-scope work (drops to L3)"
+                value:
+                  fields:
+                    technicalNotes: "Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse. Also apply a discount to reserved items."
+      responses:
+        "204": { description: Saved }
+        "404": { description: Not found }
+  /rest/api/v3/issue/{key}/transitions:
+    post:
+      summary: 3. Move a story to Ready for Dev. The gate allows only L4.
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string }, example: NORTH-1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+            example: { to: Ready for Dev }
+      responses:
+        "204": { description: Moved }
+        "400": { description: Not ready for development }
+  /board:
+    get:
+      summary: 5. The developer board. Only stories that passed the gate.
+      responses:
+        "200": { description: The board }
+  /admin/reset:
+    post:
+      summary: Start over
+      responses:
+        "204": { description: Everything is gone }
+  /v1/stories/{key}/readiness:
+    servers:
+      - url: http://localhost:9001
+        description: API gateway
+    get:
+      summary: Read a story's grade through the gateway
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string }, example: NORTH-1 }
+        - { name: X-Api-Key, in: header, required: true, schema: { type: string, default: dev-only-api-key } }
+      responses:
+        "200": { description: The latest grade }
+        "401": { description: Missing or wrong API key }
+        "404": { description: Not graded yet }
