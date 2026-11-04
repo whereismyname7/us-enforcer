@@ -76,10 +76,10 @@ paths:
         - name: X-Hub-Signature
           in: header
           required: true
-          description: "sha256= followed by the hex HMAC-SHA256 of the raw body"
+          description: "sha256= followed by the hex HMAC-SHA256 of the raw body. In Swagger UI leave it as auto and the page signs the body for you; type anything else to test a forged webhook."
           schema:
             type: string
-            example: sha256=3f1c...
+            example: auto
       # The body is Jira's webhook JSON.
       requestBody:
         required: true
@@ -87,6 +87,22 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/JiraWebhook"
+            # Ready to send once NORTH-1 exists: "the BA changed the acceptance criteria".
+            example:
+              webhookEvent: "jira:issue_updated"
+              timestamp: 1793606400123
+              user:
+                accountId: ba.user
+              issue:
+                key: NORTH-1
+                fields:
+                  issuetype:
+                    name: Story
+                  project:
+                    key: NORTH
+              changelog:
+                items:
+                  - field: acceptanceCriteria
       responses:
         # 202 means "accepted; the work happens after this answer".
         "202":

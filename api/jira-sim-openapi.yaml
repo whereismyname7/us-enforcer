@@ -69,6 +69,20 @@ paths:
                   example: NORTH-1
                 fields:
                   $ref: "#/components/schemas/IssueFieldsInput"
+            # Ready-made bodies from samples/. Pick one from the Examples list.
+            examples:
+              cr12:
+                summary: CR-12, approved, Checkout only (create this first)
+                value: { "key": "CR-12", "fields": { "project": { "key": "CR" }, "issuetype": { "name": "Change Request" }, "summary": "Customers can reserve stock during checkout", "status": "Approved", "impactedSystems": ["Checkout"], "inScope": ["reserve stock during checkout", "release unpaid reservations"], "outOfScope": ["discount", "delivery fee"], "targetDate": "2026-12-15" } }
+              weakStory:
+                summary: NORTH-1, the weak story (grades L1)
+                value: { "key": "NORTH-1", "fields": { "project": { "key": "NORTH" }, "issuetype": { "name": "Story" }, "summary": "[Cart] Reserve stock", "asA": "customer", "iWant": "my items reserved", "soThat": "they don't sell out", "acceptanceCriteria": "Stock should be reserved quickly at checkout. Reservation time TBD." } }
+              giftWrap:
+                summary: NORTH-2, gift wrap, no CR (grades L2)
+                value: { "key": "NORTH-2", "fields": { "project": { "key": "NORTH" }, "issuetype": { "name": "Story" }, "summary": "[Checkout] Add gift wrap", "asA": "customer", "iWant": "to add gift wrap to my order", "soThat": "my gift arrives ready to give", "acceptanceCriteria": "Given an item is in my cart, When I select gift wrap, Then a fee of 10 SAR is added.\nGiven gift wrap is unavailable, When I select it, Then I see an unavailable message." } }
+              autoLinked:
+                summary: NORTH-3, mentions CR-12 in its notes (auto-linked, grades L4)
+                value: { "key": "NORTH-3", "fields": { "project": { "key": "NORTH" }, "issuetype": { "name": "Story" }, "summary": "[Checkout] Add gift wrap", "asA": "customer", "iWant": "to add gift wrap to my order", "soThat": "my gift arrives ready to give", "acceptanceCriteria": "Given an item is in my cart, When I select gift wrap, Then a fee of 10 SAR is added.\nGiven gift wrap is unavailable, When I select it, Then I see an unavailable message.", "technicalNotes": "Part of CR-12. Data owner: Checkout." } }
       responses:
         "201":
           description: Created
@@ -111,6 +125,20 @@ paths:
               properties:
                 fields:
                   $ref: "#/components/schemas/IssueFieldsInput"
+            # Ready-made bodies from samples/. Set {key} to match: NORTH-1 for the stories, CR-12 for the CR.
+            examples:
+              fixStory:
+                summary: NORTH-1, fix the story (v2)
+                value: { "fields": { "acceptanceCriteria": "Given an item is in my cart, When I start checkout, Then 1 unit is reserved within 2 seconds.\nGiven a reservation is 15 minutes old, When payment has not completed, Then the unit is released.\nGiven the item is out of stock, When I start checkout, Then I see an out-of-stock message.", "technicalNotes": "Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse." } }
+              scopeCreep:
+                summary: NORTH-1, scope creep (v3, adds a discount)
+                value: { "fields": { "technicalNotes": "Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse. Also apply a discount to reserved items." } }
+              crAddWarehouse:
+                summary: CR-12, add Warehouse to the impacted systems (set key to CR-12)
+                value: { "fields": { "impactedSystems": ["Checkout", "Warehouse"] } }
+              crDraft:
+                summary: CR-12, set back to Draft (set key to CR-12)
+                value: { "fields": { "status": "Draft" } }
       responses:
         "204":
           description: Saved
@@ -152,6 +180,7 @@ paths:
                     key:
                       type: string
                       example: CR-12
+            example: { "type": { "name": "Implements" }, "inwardIssue": { "key": "NORTH-1" }, "outwardIssue": { "key": "CR-12" } }
       responses:
         "201":
           description: Linked (or already linked)
@@ -191,6 +220,7 @@ paths:
         content:
           application/json:
             schema: {}
+            example: { "state": "Pending", "story_updated_at": "2026-11-04T09:00:00.000Z" }
       responses:
         "200":
           description: Saved
@@ -216,6 +246,7 @@ paths:
               properties:
                 body:
                   type: string
+            example: { "body": "Checking the discount question with the PO." }
       responses:
         "201":
           description: Added
@@ -279,6 +310,23 @@ paths:
                     reason:
                       type: string
                       minLength: 5
+            # Ready-made bodies from samples/.
+            examples:
+              readyForDev:
+                summary: Ready for Dev (runs the gate)
+                value: { "transition": { "id": "21" } }
+              override:
+                summary: Ready for Dev with an architect's override
+                value: { "transition": { "id": "21" }, "override": { "by": "lead.architect", "role": "architect", "reason": "Agreed with the PO for the demo" } }
+              badOverride:
+                summary: Override with a role that is not allowed (expect 400)
+                value: { "transition": { "id": "21" }, "override": { "by": "dev.user", "role": "developer", "reason": "I want it" } }
+              backToRefinement:
+                summary: Back to Refinement
+                value: { "transition": { "id": "11" } }
+              inProgress:
+                summary: In Progress (only from Ready for Dev)
+                value: { "transition": { "id": "31" } }
       responses:
         "204":
           description: Moved. Webhook jira:issue_updated with changelog status.
@@ -376,6 +424,13 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/Chaos"
+            examples:
+              off:
+                summary: Chaos off (normal)
+                value: { "fail_bot_writes": false, "delay_ms": 0 }
+              on:
+                summary: Chaos on (the bot's writes fail with 503)
+                value: { "fail_bot_writes": true, "delay_ms": 0 }
       responses:
         "200":
           description: The new settings

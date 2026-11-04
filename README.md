@@ -208,6 +208,14 @@ You should see 8 healthy containers (redpanda, redis, jira-sim, gateway, intake,
 
 Render the C4 diagrams with `docker compose run --rm diagrams`. Stop everything with `docker compose down`.
 
+### Try the APIs in a browser (Swagger UI)
+
+```bash
+docker compose up -d swagger
+```
+
+Open http://localhost:9002. Pick **Gateway API** or **Jira simulator** at the top right. Every request is prefilled: pick a ready-made body from **Examples**, then click **Execute**. The API key is already authorized, and webhooks are signed for you when `X-Hub-Signature` is left as `auto`. The same requests are also in `postman/us-enforcer.postman_collection.json`.
+
 ---
 
 ## Walkthrough

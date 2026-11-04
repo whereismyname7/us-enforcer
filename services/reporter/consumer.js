@@ -132,8 +132,9 @@ function createConsumer(options) {
       return;
     }
     // Step 4: the SLI. How long from the save in Jira to the grade.
+    // The grade goes in grade_level, because "level" is the log line's own info/warn/error.
     const lagMs = Date.parse(grade.checked_at) - Date.parse(grade.story_updated_at);
-    options.log({ level: "info", event: "graded", story_key: storyKey, level: grade.level, lag_ms: lagMs, source_event_id: grade.source_event_id, written: outcome });
+    options.log({ level: "info", event: "graded", story_key: storyKey, grade_level: grade.level, lag_ms: lagMs, source_event_id: grade.source_event_id, written: outcome });
   }
 
   // Connect and start reading, patiently. Keep trying until the broker answers; never exit.
