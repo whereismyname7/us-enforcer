@@ -8,6 +8,16 @@ const TOPIC = "readiness.check-results";
 const kafka = new Kafka({ clientId: "reporter", brokers: [process.env.KAFKA_BROKER || "redpanda:29092"], logLevel: logLevel.NOTHING });
 const consumer = kafka.consumer({ groupId: "reporter-grading" });
 
+// Every status a story can have, for the lookup endpoint.
+const STATUSES = [
+  { status: "Pending", description: "Saved and waiting for its check. The gate stays closed." },
+  { status: "L0", description: "Not a draft. It does not have the shape of a story yet." },
+  { status: "L1", description: "Draft. It has a title, a role, a goal and a benefit." },
+  { status: "L2", description: "Defined. Its acceptance criteria can be tested." },
+  { status: "L3", description: "Refined. It is linked to a CR, and its impact is known and follows the ADRs." },
+  { status: "L4", description: "Dev-ready. The CR is approved, it is in scope and it has a data owner. Only L4 passes the gate." }
+];
+
 // In memory for the proof of concept. Event ids we already handled, and the latest grade per story.
 const alreadyApplied = new Set();
 const grades = new Map();
@@ -74,11 +84,16 @@ app.get("/health", function (req, res) {
   res.status(listening ? 200 : 503).json({ status: listening ? "ok" : "starting", service: "reporter" });
 });
 
+// The lookup: every status and what it means.
+app.get("/v1/statuses", function (req, res) {
+  res.json({ statuses: STATUSES });
+});
+
 // The readiness API, reached through the gateway.
 app.get("/v1/stories/:key/readiness", function (req, res) {
   const grade = grades.get(req.params.key);
   if (!grade) return res.status(404).json({ error: "not_graded", message: "No grade yet for " + req.params.key });
-  res.json({ level: grade.level, missing: grade.missing, impacted_containers: grade.impacted_containers, story_updated_at: grade.story_updated_at });
+  res.json({ status: grade.level, missing: grade.missing, impacted_containers: grade.impacted_containers, story_updated_at: grade.story_updated_at });
 });
 
 async function main() {

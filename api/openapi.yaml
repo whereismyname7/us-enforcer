@@ -49,7 +49,7 @@ paths:
     parameters:
       - { name: key, in: path, required: true, schema: { type: string }, example: NORTH-1 }
     get:
-      summary: 2. Read a story, with its level, what is missing and its comments
+      summary: "2. Read a story: status (Pending or L0-L4), workflowStatus (board column), what is missing and comments"
       responses:
         "200": { description: The issue }
         "404": { description: Not found }
@@ -104,6 +104,21 @@ paths:
       summary: Start over
       responses:
         "204": { description: Everything is gone }
+  /v1/statuses:
+    servers:
+      - url: http://localhost:9001
+        description: API gateway
+    get:
+      summary: Look up every status and what it means
+      responses:
+        "200":
+          description: Every status with a short description
+          content:
+            application/json:
+              example:
+                statuses:
+                  - { status: Pending, description: Saved and waiting for its check. The gate stays closed. }
+                  - { status: L4, description: Dev-ready. The CR is approved, it is in scope and it has a data owner. Only L4 passes the gate. }
   /v1/stories/{key}/readiness:
     servers:
       - url: http://localhost:9001

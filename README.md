@@ -28,7 +28,7 @@ Jira ──webhook──> Gateway ──> Intake ──StoryChanged──> Check
 | **L3** Refined | Impact is known and allowed | CR linked; containers found; no conflict with the target's ADRs |
 | **L4** Dev-ready | Can enter a sprint | CR approved; nothing out of scope; impact declared by the CR; data owner named |
 
-A story is L0 if an L1 check fails. Rules live in [`rules.yaml`](services/checker/rules.yaml), so adding a word or an ADR rule is a config change. The target system is Northline Shop, described by `rules.yaml` and [`target-containers.puml`](services/checker/target-containers.puml).
+A story is L0 if an L1 check fails. A story's `status` field holds its exact value (`Pending`, or `L0` to `L4`), and `workflowStatus` holds its board column. `GET http://localhost:9001/v1/statuses` lists every status with a short description. Rules live in [`rules.yaml`](services/checker/rules.yaml), so adding a word or an ADR rule is a config change. The target system is Northline Shop, described by `rules.yaml` and [`target-containers.puml`](services/checker/target-containers.puml).
 
 ## Run it
 
@@ -44,13 +44,13 @@ docker compose run --rm demo
 
 The demo walks one story through the whole flow: weak story at L1, gate refuses it, story fixed to L4, gate opens, scope creep drops it to L3 and it moves back. It prints the comments a BA would see and ends with `DEMO PASSED`.
 
-To try it by hand, run `docker compose up -d swagger` and open http://localhost:9002.
+To try it by hand, open Swagger UI at http://localhost:9002.
 
 | Port | Service |
 |------|---------|
 | 9000 | Jira simulator |
 | 9001 | API gateway (`X-Api-Key: dev-only-api-key`) |
-| 9002 | Swagger UI (optional) |
+| 9002 | Swagger UI |
 
 ```bash
 docker compose run --rm fitness

@@ -95,6 +95,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Try the API in a browser. Laptop port 9002.
+  swagger:
+    image: swaggerapi/swagger-ui
+    ports:
+      - "9002:8080"
+    environment:
+      SWAGGER_JSON: "/spec/openapi.yaml"
+    volumes:
+      - ./api:/spec:ro
+    restart: unless-stopped
+
   # ---- Tools. Started by hand only. ----
 
   # The story from start to finish: docker compose run --rm demo
@@ -126,17 +137,6 @@ services:
     environment:
       JIRA_URL: "http://jira-sim:3000"
     command: ["run", "/scripts/story-burst.js"]
-    profiles: ["tools"]
-
-  # Try the API in a browser: docker compose up -d swagger, then open http://localhost:9002
-  swagger:
-    image: swaggerapi/swagger-ui
-    ports:
-      - "9002:8080"
-    environment:
-      SWAGGER_JSON: "/spec/openapi.yaml"
-    volumes:
-      - ./api:/spec:ro
     profiles: ["tools"]
 
   # Render the C4 diagrams: docker compose run --rm diagrams

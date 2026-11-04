@@ -51,7 +51,7 @@ const moveToReady = function () { return call("POST", JIRA + ISSUE + "/NORTH-1/t
 async function waitForGrade() {
   for (let i = 0; i < 40; i++) {
     const story = await getStory();
-    if (story.level && story.level !== "Pending") return story;
+    if (story.status && story.status !== "Pending") return story;
     await new Promise(function (resolve) { setTimeout(resolve, 500); });
   }
   throw new Error("no grade after 20 seconds");
@@ -75,7 +75,7 @@ async function main() {
   console.log("\n1. A BA saves a weak story.");
   await call("POST", JIRA + ISSUE, WEAK_STORY);
   let story = await waitForGrade();
-  expect("the story is graded L1", story.level, "L1");
+  expect("the story's status is L1", story.status, "L1");
   expect("a comment says what is missing", story.comments.length, 1);
   console.log("\n" + story.comments[0].body + "\n");
 
@@ -85,9 +85,9 @@ async function main() {
   console.log("\n3. The architect declares Warehouse on the CR, and the BA fixes the story.");
   await call("PUT", JIRA + ISSUE + "/CR-12", { fields: { impactedSystems: ["Checkout", "Warehouse"] } });
   await call("PUT", JIRA + ISSUE + "/NORTH-1", FIXED_STORY);
-  expect("it is Pending straight after the save", (await getStory()).level, "Pending");
+  expect("it is Pending straight after the save", (await getStory()).status, "Pending");
   story = await waitForGrade();
-  expect("the story is graded L4", story.level, "L4");
+  expect("the story's status is L4", story.status, "L4");
 
   console.log("\n4. The gate opens and developers see it.");
   expect("the gate allows it", (await moveToReady()).status, 204);
@@ -96,8 +96,8 @@ async function main() {
   console.log("\n5. Next day, someone adds work the CR puts out of scope.");
   await call("PUT", JIRA + ISSUE + "/NORTH-1", SCOPE_CREEP);
   story = await waitForGrade();
-  expect("the story drops to L3", story.level, "L3");
-  expect("it moves back to Refinement", story.status, "Refinement");
+  expect("the story drops to L3", story.status, "L3");
+  expect("it moves back to Refinement", story.workflowStatus, "Refinement");
   expect("it leaves the board", await onBoard(), false);
   console.log("\n" + story.comments[story.comments.length - 1].body + "\n");
 
@@ -105,7 +105,9 @@ async function main() {
   const path = GATEWAY + "/v1/stories/NORTH-1/readiness";
   expect("no key is refused", (await call("GET", path)).status, 401);
   const graded = await call("GET", path, undefined, { "X-Api-Key": "dev-only-api-key" });
-  expect("with the key it answers L3", graded.body.level, "L3");
+  expect("with the key it answers L3", graded.body.status, "L3");
+  const lookup = await call("GET", GATEWAY + "/v1/statuses");
+  expect("the lookup lists all 6 statuses", lookup.body.statuses.length, 6);
 
   console.log(failures === 0 ? "\nDEMO PASSED" : "\nDEMO FAILED: " + failures + " step(s)");
   process.exit(failures === 0 ? 0 : 1);

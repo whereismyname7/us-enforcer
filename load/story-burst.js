@@ -38,6 +38,6 @@ export function teardown() {
   sleep(10);
   for (let i = 1; i <= COUNT; i++) {
     const res = http.get(JIRA + "/rest/api/v3/issue/LOAD-" + i);
-    gradedInTime.add(res.status === 200 && res.json("level") !== "Pending");
+    gradedInTime.add(res.status === 200 && res.json("status") !== "Pending");
   }
 }

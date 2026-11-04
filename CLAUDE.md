@@ -13,12 +13,11 @@ Node.js 20 (CommonJS), Redpanda, nginx, Docker Compose. There is no linter, unit
 Dependencies are only installed inside images.
 
 ```bash
-docker compose up -d --build --wait      # start everything
+docker compose up -d --build --wait      # start everything, including Swagger UI on http://localhost:9002
 docker compose run --rm demo             # end-to-end story; wipes the simulator's data
 docker compose run --rm fitness          # architecture rules
 docker compose run --rm k6               # SLO load test; wipes the simulator's data
 docker compose run --rm diagrams         # render docs/*.puml to PNG
-docker compose up -d swagger             # optional, http://localhost:9002
 docker compose up -d --build checker     # apply a change to one service
 ```
 
@@ -37,7 +36,8 @@ Boundaries, enforced by `fitness/service-boundaries.js`:
 
 Behaviour that is easy to break:
 
-- **The gate** lives in `services/jira-sim/server.js` and reads only the stored level.
+- **The gate** lives in `services/jira-sim/server.js` and reads only the stored `status`.
+- **Two fields on a story:** `status` is readiness (`Pending`, `L0` to `L4`) and `workflowStatus` is the board column. On a CR, `status` is the CR's own status, such as `Approved`. The lookup list is `STATUSES` in `services/reporter/server.js`.
 - **Stale grades:** `jira-sim` answers 409 when a grade's `story_updated_at` is not the story's current `updated`.
 - **One comment per change:** `jira-sim` skips the comment when the level and missing list are unchanged.
 - **Gateway addresses:** `gateway/nginx.conf` uses variables with `resolver` so names resolve per request. A static `upstream` keeps a stale IP after a restart and sends webhooks to the wrong service.

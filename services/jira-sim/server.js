@@ -41,16 +41,17 @@ async function sendWebhook(key) {
 // Any human edit makes the old grade worthless: back to Pending, and check again.
 function storyChanged(story) {
   story.updated = tick();
-  story.level = "Pending";
+  story.status = "Pending";
   story.missing = [];
   sendWebhook(story.key);
 }
 
-// A person may edit a story's text, but never its status or level. Those go through the gate and the Reporter.
+// A story has two values. status is its readiness: Pending or L0 to L4. workflowStatus is its board column.
+// A person may edit a story's text, but never these. They go through the Reporter and the gate.
 function editable(type, fields) {
   if (type !== "Story") return fields;
   const copy = Object.assign({}, fields);
-  ["status", "level", "missing", "comments", "updated", "key", "type"].forEach(function (f) { delete copy[f]; });
+  ["status", "workflowStatus", "missing", "comments", "updated", "key", "type"].forEach(function (f) { delete copy[f]; });
   return copy;
 }
 
@@ -82,7 +83,7 @@ app.post(ISSUE, function (req, res) {
     return res.status(409).json({ errorMessages: [key + " already exists"] });
   }
   const issue = Object.assign({}, editable(type, fields), { key: key, type: type, comments: [] });
-  if (type === "Story") issue.status = "Refinement";
+  if (type === "Story") issue.workflowStatus = "Refinement";
   delete issue.issuetype;
   delete issue.project;
   issues.set(key, issue);
@@ -112,15 +113,15 @@ app.put(ISSUE + "/:key", function (req, res) {
   res.sendStatus(204);
 });
 
-// THE GATE. It reads only the stored level, so it stays closed when our services are down.
+// THE GATE. It reads only the stored status, so it stays closed when our services are down.
 app.post(ISSUE + "/:key/transitions", function (req, res) {
   const story = issues.get(req.params.key);
   if (!story) return res.status(404).json({ errorMessages: ["Issue does not exist"] });
-  if (story.type !== "Story" || story.level !== "L4") {
-    log({ level: "info", event: "gate_refused", key: story.key, readiness: story.level });
-    return res.status(400).json({ errorMessages: ["This story is not ready for development. See the readiness comment for what is missing."], errors: { readiness: story.level } });
+  if (story.type !== "Story" || story.status !== "L4") {
+    log({ level: "info", event: "gate_refused", key: story.key, readiness: story.status });
+    return res.status(400).json({ errorMessages: ["This story is not ready for development. See the readiness comment for what is missing."], errors: { readiness: story.status } });
   }
-  story.status = "Ready for Dev";
+  story.workflowStatus = "Ready for Dev";
   res.sendStatus(204);
 });
 
@@ -131,11 +132,11 @@ app.put(ISSUE + "/:key/readiness", function (req, res) {
   const grade = req.body;
   // The grade is for an older version of the story, so a newer check is already on its way.
   if (grade.story_updated_at !== story.updated) return res.sendStatus(409);
-  story.level = grade.level;
+  story.status = grade.level;
   story.missing = grade.missing;
   let comment = grade.comment;
-  if (story.status === "Ready for Dev" && grade.level !== "L4") {
-    story.status = "Refinement";
+  if (story.workflowStatus === "Ready for Dev" && grade.level !== "L4") {
+    story.workflowStatus = "Refinement";
     comment = "Moved back to Refinement: readiness dropped to " + grade.level + ".\n\n" + comment;
   }
   const fingerprint = JSON.stringify([grade.level, grade.missing]);
@@ -148,8 +149,8 @@ app.put(ISSUE + "/:key/readiness", function (req, res) {
 
 // The developer board shows only stories that passed the gate.
 app.get("/board", function (req, res) {
-  const ready = Array.from(issues.values()).filter(function (i) { return i.status === "Ready for Dev"; });
-  res.json({ issues: ready.map(function (i) { return { key: i.key, summary: i.summary, level: i.level }; }) });
+  const ready = Array.from(issues.values()).filter(function (i) { return i.workflowStatus === "Ready for Dev"; });
+  res.json({ issues: ready.map(function (i) { return { key: i.key, summary: i.summary, status: i.status }; }) });
 });
 
 // Start over, for the demo.
