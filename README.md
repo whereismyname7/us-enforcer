@@ -44,13 +44,14 @@ docker compose run --rm demo
 
 The demo walks one story through the whole flow: weak story at L1, gate refuses it, story fixed to L4, gate opens, scope creep drops it to L3 and it moves back. It prints the comments a BA would see and ends with `DEMO PASSED`.
 
-To try it by hand, open Swagger UI at http://localhost:9002.
+To try it by hand, open Swagger UI at http://localhost:9002. To watch the cases, open the case viewer at http://localhost:9003.
 
 | Port | Service |
 |------|---------|
 | 9000 | Jira simulator |
 | 9001 | API gateway (`X-Api-Key: dev-only-api-key`) |
 | 9002 | Swagger UI |
+| 9003 | Case viewer: every story and CR with its grade |
 
 ```bash
 docker compose run --rm fitness

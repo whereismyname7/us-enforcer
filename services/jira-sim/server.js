@@ -92,6 +92,11 @@ app.post(ISSUE, function (req, res) {
   res.status(201).json({ key: key });
 });
 
+// Every story and CR, for the case viewer. Real Jira does this with JQL search.
+app.get("/rest/api/v3/search", function (req, res) {
+  res.json({ issues: Array.from(issues.values()) });
+});
+
 app.get(ISSUE + "/:key", function (req, res) {
   const issue = issues.get(req.params.key);
   if (!issue) return res.status(404).json({ errorMessages: ["Issue does not exist"] });
@@ -141,7 +146,7 @@ app.put(ISSUE + "/:key/readiness", function (req, res) {
   }
   const fingerprint = JSON.stringify([grade.level, grade.missing]);
   if (story.lastGrade !== fingerprint) {
-    story.comments.push({ author: "story-readiness-bot", body: comment });
+    story.comments.push({ author: "story-readiness-bot", body: comment, created: new Date().toISOString() });
     story.lastGrade = fingerprint;
   }
   res.sendStatus(204);

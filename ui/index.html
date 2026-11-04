@@ -1,0 +1,192 @@
+<!doctype html>
+<!-- The case viewer: every story and CR in the Jira stand-in, with its grade. Read-only except the gate button. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story Readiness</title>
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --ink: #1d2330; --muted: #667085; --line: #e3e6eb;
+          --l0: #c62828; --l1: #d84315; --l2: #ef6c00; --l3: #f9a825; --l4: #2e7d32; --pending: #78909c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--card);
+           display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  h1 { font-size: 18px; margin: 0; }
+  .muted { color: var(--muted); }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 12px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 12px 0 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .key { font-weight: 600; }
+  .badge { color: #fff; border-radius: 4px; padding: 1px 8px; font-weight: 600; font-size: 12px; }
+  .level { font-size: 12px; color: var(--muted); margin-left: -4px; }
+  .summary { font-weight: 500; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .meta b { color: var(--ink); font-weight: 500; }
+  .fields { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 10px 0 0; }
+  .fields dt { font-size: 12px; color: var(--muted); padding-top: 1px; }
+  .fields dd { margin: 0; white-space: pre-wrap; }
+  .fields .empty-field { color: var(--l0); font-style: italic; }
+  @media (max-width: 560px) { .fields { grid-template-columns: 1fr; } .fields dd { margin-bottom: 6px; } }
+  .missing { margin-top: 8px; }
+  .spacer { flex: 1; }
+  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+             margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .group-label { font-size: 12px; color: var(--muted); }
+  button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--card); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--ink); }
+  button[data-action="fix"] { color: var(--l4); }
+  button[data-action="ruin"] { color: var(--l0); }
+  button[data-action="move"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button[data-action="move"]:hover { opacity: .85; }
+  .done { font-size: 12px; color: var(--l4); font-weight: 600; }
+  ul { margin: 4px 0 0; padding-left: 18px; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); }
+  .comment { margin-top: 10px; }
+  .when { font-size: 12px; color: var(--muted); }
+  .when b { color: var(--ink); font-weight: 500; }
+  pre { white-space: pre-wrap; background: var(--bg); padding: 8px; border-radius: 6px; margin: 6px 0 0; font: 12px/1.4 ui-monospace, monospace; }
+  .msg { font-size: 12px; }
+  .error { color: var(--l0); font-weight: 600; }
+  .empty { text-align: center; padding: 40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Story Readiness</h1>
+  <span class="muted" id="status">Loading…</span>
+</header>
+<main id="app"></main>
+<script>
+// The Jira stand-in is on port 9000 of the same machine.
+const JIRA = location.protocol + "//" + location.hostname + ":9000";
+const ISSUE = JIRA + "/rest/api/v3/issue/";
+const COLORS = { L0: "--l0", L1: "--l1", L2: "--l2", L3: "--l3", L4: "--l4", Pending: "--pending" };
+// Level names, as in the README and the Reporter's status lookup.
+const LEVELS = { Pending: "Being checked", L0: "Not a draft", L1: "Draft", L2: "Defined", L3: "Refined", L4: "Dev-ready" };
+const notes = {};
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+}
+
+function badge(status) {
+  const color = COLORS[status] ? "var(" + COLORS[status] + ")" : "var(--muted)";
+  return '<span class="badge" style="background:' + color + '">' + esc(status) + "</span>";
+}
+
+function button(key, action, label, title) {
+  return '<button data-key="' + esc(key) + '" data-action="' + action + '" title="' + esc(title) + '">' + label + "</button>";
+}
+
+// One story field. An empty one is shown as empty, so you can see what a BA left out.
+function field(label, value) {
+  const empty = !value || !String(value).trim();
+  return "<dt>" + label + "</dt><dd" + (empty ? ' class="empty-field">(empty)' : ">" + esc(value)) + "</dd>";
+}
+
+function story(s) {
+  if (s.status !== "Pending" && notes[s.key]) notes[s.key] = notes[s.key].replace(" Checking…", "");
+  const note = notes[s.key] || "";
+  const ready = s.workflowStatus === "Ready for Dev";
+  const missing = (s.missing || []).map(function (m) { return "<li>" + esc(typeof m === "string" ? m : JSON.stringify(m)) + "</li>"; }).join("");
+  // Newest first. Jira stamps each comment with when it was created.
+  const comments = (s.comments || []).slice().sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); })
+    .map(function (c) {
+      const when = c.created ? new Date(c.created).toLocaleString() : "unknown time";
+      return '<div class="comment"><div class="when"><b>' + esc(c.author) + "</b> · " + esc(when) + "</div><pre>" + esc(c.body) + "</pre></div>";
+    }).join("");
+  return '<div class="card">' +
+    '<div class="top">' + badge(s.status) + '<span class="level">' + esc(LEVELS[s.status] || "") + "</span>" +
+    '<span class="key">' + esc(s.key) + '</span><span class="summary">' + esc(s.summary) + "</span></div>" +
+    '<div class="meta">Board column: <b>' + esc(s.workflowStatus) + "</b>" +
+    (s.crKey ? " · Change Request: <b>" + esc(s.crKey) + "</b>" : "") + "</div>" +
+    '<dl class="fields">' +
+      field("As a", s.asA) + field("I want", s.iWant) + field("So that", s.soThat) +
+      field("Acceptance criteria", s.acceptanceCriteria) + field("Technical notes", s.technicalNotes) +
+    "</dl>" +
+    (missing ? '<div class="missing"><b>What is missing for L4</b><ul>' + missing + "</ul></div>" : "") +
+    (comments ? "<details><summary>Readiness comments (" + s.comments.length + "), newest first</summary>" + comments + "</details>" : "") +
+    '<div class="actions">' +
+      '<span class="group-label">Simulate a BA edit</span>' +
+      button(s.key, "fix", "✓ Complete the story", "Fill in testable criteria, the event and the data owner") +
+      button(s.key, "ruin", "✗ Break the story", "Make the criteria vague and clear the technical notes") +
+      '<span class="spacer"></span>' +
+      '<span class="msg ' + (/^(Gate refused|Edit failed)/.test(note) ? "error" : "muted") + '">' + esc(note) + "</span>" +
+      (ready ? '<span class="done">On the developer board</span>'
+             : button(s.key, "move", "Move to Ready for Dev →", "Ask the gate. Only L4 passes.")) +
+    "</div></div>";
+}
+
+function cr(c) {
+  return '<div class="card"><div class="top">' + badge(c.status) +
+    '<span class="key">' + esc(c.key) + '</span><span class="summary">' + esc(c.summary) + "</span></div>" +
+    '<div class="meta">Declared impact: <b>' + esc((c.impactedSystems || []).join(", ") || "none") +
+    "</b> · Out of scope: <b>" + esc((c.outOfScope || []).join(", ") || "none") + "</b></div></div>";
+}
+
+async function refresh() {
+  const app = document.getElementById("app");
+  const open = Array.from(app.querySelectorAll("details[open]")).map(function (d) { return d.closest(".card").querySelector(".key").textContent; });
+  try {
+    const issues = (await (await fetch(JIRA + "/rest/api/v3/search")).json()).issues;
+    const stories = issues.filter(function (i) { return i.type === "Story"; });
+    const crs = issues.filter(function (i) { return i.type !== "Story"; });
+    app.innerHTML = issues.length === 0
+      ? '<div class="card empty muted">No cases yet. Run <code>docker compose run --rm demo</code> or create one in Swagger UI.</div>'
+      : "<h2>Stories</h2>" + (stories.map(story).join("") || '<div class="muted">None</div>') +
+        "<h2>Change Requests</h2>" + (crs.map(cr).join("") || '<div class="muted">None</div>');
+    app.querySelectorAll(".card").forEach(function (card) {
+      const key = card.querySelector(".key").textContent;
+      const d = card.querySelector("details");
+      if (d && open.includes(key)) d.open = true;
+    });
+    document.getElementById("status").className = "muted";
+    document.getElementById("status").textContent = stories.length + " stories, " + crs.length + " CRs · refreshed " + new Date().toLocaleTimeString();
+  } catch (err) {
+    document.getElementById("status").className = "error";
+    document.getElementById("status").textContent = "Cannot reach jira-sim at " + JIRA + " (" + err.message + ")";
+  }
+}
+
+// A story that passes every check, as long as its CR declares Checkout and Warehouse.
+const GOOD = {
+  summary: "[Cart] Reserve stock",
+  asA: "customer",
+  iWant: "my items reserved at checkout",
+  soThat: "they don't sell out while I pay",
+  acceptanceCriteria: "Given an item is in my cart, When I start checkout, Then 1 unit is reserved within 2 seconds.\nGiven the item is out of stock, When I start checkout, Then I see an out-of-stock message.",
+  technicalNotes: "Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse."
+};
+// Vague, with an open question and no technical notes.
+const BAD = {
+  acceptanceCriteria: "Stock should be reserved quickly at checkout. Reservation time TBD.",
+  technicalNotes: ""
+};
+
+function send(method, url, body) {
+  return fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+// Fix and Ruin edit the story like a BA would. Move asks the gate, which refuses anything below L4.
+document.getElementById("app").addEventListener("click", async function (e) {
+  const key = e.target.dataset && e.target.dataset.key;
+  if (!key) return;
+  const action = e.target.dataset.action;
+  if (action === "move") {
+    const res = await send("POST", ISSUE + key + "/transitions", { to: "Ready for Dev" });
+    notes[key] = res.ok ? "Moved." : "Gate refused: " + ((await res.json()).errorMessages || [""])[0];
+  } else {
+    const res = await send("PUT", ISSUE + key, { fields: action === "fix" ? GOOD : BAD });
+    notes[key] = res.ok ? (action === "fix" ? "Story completed. Checking…" : "Story broken. Checking…") : "Edit failed: " + res.status;
+  }
+  refresh();
+});
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

@@ -106,6 +106,15 @@ services:
       - ./api:/spec:ro
     restart: unless-stopped
 
+  # The case viewer: every story and CR with its grade. Laptop port 9003.
+  ui:
+    image: nginx:alpine
+    ports:
+      - "9003:80"
+    volumes:
+      - ./ui:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
   # ---- Tools. Started by hand only. ----
 
   # The story from start to finish: docker compose run --rm demo
