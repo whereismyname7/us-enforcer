@@ -1,448 +1,155 @@
-# The contract of our Jira simulator (jira-sim). It answers the Jira Cloud REST paths our services call.
-# Everything is kept in memory. Switching to real Jira later means changing JIRA_URL (ADR-008).
+# The Jira simulator (jira-sim): the main demo flow only, in the order you run it.
+# Internal routes used by our services and tests (issueLink, readiness, search, admin) are left out on purpose.
 openapi: 3.0.3
 
-# General information about this API, for humans reading it.
 info:
-  title: Jira Simulator API
+  title: Jira simulator - story flow
   version: 1.0.0
   description: >
-    Rules for every request:
-    The X-Actor header is the caller's account id; missing means ba.user. Our bot is story-readiness-bot.
-    Errors use Jira's shape {"errorMessages":[...],"errors":{...}} with status 400, 404 or 409.
-    Times are ISO 8601 with milliseconds in UTC.
-    fields.updated changes only when content or links change, never on status, labels, comments or properties.
-    After each change the simulator POSTs a signed webhook to WEBHOOK_URL (X-Hub-Signature: sha256=<hex HMAC>),
-    with a 3 s timeout and up to 3 attempts. Chaos (see /admin/chaos) affects only non-GET requests from the bot.
+    Run top to bottom, choosing the example named in each step:
 
-# Where the simulator can be reached.
+    1. Create → "CR-12". 2. Create → "NORTH-1, weak story" (it mentions CR-12, so it is linked automatically).
+
+    3. Read the card for NORTH-1 → level L1 and what is missing. 4. Move to Ready for Dev → 400, blocked.
+
+    5. Update CR-12 → "add Warehouse". 6. Update NORTH-1 → "fix the story". 7. Read the card → L4.
+
+    8. Move to Ready for Dev → 204. 9. Board → NORTH-1 is there.
+
+    Optional: Update NORTH-1 → "scope creep" → card shows L3 and it is moved back; Move → "override".
+
+    To start over: docker compose restart jira-sim
+
 servers:
   - url: http://localhost:9000
     description: Local machine
-  - url: http://jira-sim:3000
-    description: Inside Docker
+
+# The steps, in order. Swagger shows the endpoints grouped under these headings.
+tags:
+  - name: 1. Create
+  - name: 2. Read the card
+  - name: 3. Move to Ready for Dev
+  - name: 4. Update
+  - name: 5. Developer board
 
 paths:
 
-  # Liveness.
-  /health:
-    get:
-      operationId: getSimHealth
-      summary: Is the simulator alive?
-      responses:
-        "200":
-          description: Running
-          content:
-            application/json:
-              example: { status: ok, service: jira-sim }
-
-  # Readiness. The simulator needs nothing else.
-  /ready:
-    get:
-      operationId: getSimReady
-      summary: Is the simulator ready?
-      responses:
-        "200":
-          description: Ready
-          content:
-            application/json:
-              example: { ready: true, service: jira-sim }
-
-  # Create a Story or a Change Request.
+  # Step 1: create the CR, then the story.
   /rest/api/v3/issue:
     post:
+      tags: ["1. Create"]
       operationId: createIssue
-      summary: Create an issue. Sends a jira:issue_created webhook.
-      parameters:
-        - $ref: "#/components/parameters/Actor"
+      summary: Create a Change Request or a story
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [fields]
-              properties:
-                # Optional. Must look like <project>-<number>; 409 if it exists.
-                key:
-                  type: string
-                  example: NORTH-1
-                fields:
-                  $ref: "#/components/schemas/IssueFieldsInput"
-            # Ready-made bodies from samples/. Pick one from the Examples list.
             examples:
               cr12:
-                summary: CR-12, approved, Checkout only (create this first)
+                summary: CR-12, approved, Checkout only (create first)
                 value: { "key": "CR-12", "fields": { "project": { "key": "CR" }, "issuetype": { "name": "Change Request" }, "summary": "Customers can reserve stock during checkout", "status": "Approved", "impactedSystems": ["Checkout"], "inScope": ["reserve stock during checkout", "release unpaid reservations"], "outOfScope": ["discount", "delivery fee"], "targetDate": "2026-12-15" } }
               weakStory:
-                summary: NORTH-1, the weak story (grades L1)
-                value: { "key": "NORTH-1", "fields": { "project": { "key": "NORTH" }, "issuetype": { "name": "Story" }, "summary": "[Cart] Reserve stock", "asA": "customer", "iWant": "my items reserved", "soThat": "they don't sell out", "acceptanceCriteria": "Stock should be reserved quickly at checkout. Reservation time TBD." } }
-              giftWrap:
-                summary: NORTH-2, gift wrap, no CR (grades L2)
-                value: { "key": "NORTH-2", "fields": { "project": { "key": "NORTH" }, "issuetype": { "name": "Story" }, "summary": "[Checkout] Add gift wrap", "asA": "customer", "iWant": "to add gift wrap to my order", "soThat": "my gift arrives ready to give", "acceptanceCriteria": "Given an item is in my cart, When I select gift wrap, Then a fee of 10 SAR is added.\nGiven gift wrap is unavailable, When I select it, Then I see an unavailable message." } }
-              autoLinked:
-                summary: NORTH-3, mentions CR-12 in its notes (auto-linked, grades L4)
-                value: { "key": "NORTH-3", "fields": { "project": { "key": "NORTH" }, "issuetype": { "name": "Story" }, "summary": "[Checkout] Add gift wrap", "asA": "customer", "iWant": "to add gift wrap to my order", "soThat": "my gift arrives ready to give", "acceptanceCriteria": "Given an item is in my cart, When I select gift wrap, Then a fee of 10 SAR is added.\nGiven gift wrap is unavailable, When I select it, Then I see an unavailable message.", "technicalNotes": "Part of CR-12. Data owner: Checkout." } }
+                summary: NORTH-1, weak story (mentions CR-12, grades L1)
+                value: { "key": "NORTH-1", "fields": { "project": { "key": "NORTH" }, "issuetype": { "name": "Story" }, "summary": "[Cart] Reserve stock", "asA": "customer", "iWant": "my items reserved", "soThat": "they don't sell out", "acceptanceCriteria": "Stock should be reserved quickly at checkout. Reservation time TBD.", "technicalNotes": "Part of CR-12." } }
       responses:
         "201":
           description: Created
           content:
             application/json:
-              example: { id: "10001", key: NORTH-1, self: "http://jira-sim:3000/rest/api/v3/issue/NORTH-1" }
-        "400":
-          $ref: "#/components/responses/JiraError"
+              example: { "key": "NORTH-1" }
         "409":
-          $ref: "#/components/responses/JiraError"
+          description: The key already exists (restart jira-sim to start over)
 
-  # Read or change one issue.
+  # Steps 3 and 7: read the card. Level and status come first.
   /rest/api/v3/issue/{key}:
     parameters:
       - $ref: "#/components/parameters/Key"
     get:
-      operationId: getIssue
-      summary: Read one issue
+      tags: ["2. Read the card"]
+      operationId: getCard
+      summary: The story card - level first, then what is missing
       responses:
         "200":
-          description: The issue
+          description: The card. "level" is L0 to L4, or Pending while the latest save is being checked.
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/Issue"
+              example: { "key": "NORTH-1", "type": "Story", "level": "L1", "status": "Refinement", "summary": "[Cart] Reserve stock", "missing": ["R-AC-01: 1 criteria are not Given/When/Then", "R-OPQ-01: Open question left: \"TBD\""], "warnings": [], "links": [{ "relation": "implements", "key": "CR-12", "type": "Change Request", "status": "Approved" }], "comments": [{ "author": "story-readiness-bot", "body": "Story readiness: L1 of 4. ...", "created": "2026-11-04T10:00:22.442Z" }], "updated": "2026-11-04T10:00:21.505Z" }
         "404":
-          $ref: "#/components/responses/JiraError"
+          description: No issue with that key
+
+    # Steps 5 and 6: update the CR, then the story.
     put:
+      tags: ["4. Update"]
       operationId: updateIssue
-      summary: Merge fields into the issue. Webhook jira:issue_updated listing every changed field; none if nothing changed.
-      parameters:
-        - $ref: "#/components/parameters/Actor"
+      summary: Change fields (set the key to match the example)
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [fields]
-              properties:
-                fields:
-                  $ref: "#/components/schemas/IssueFieldsInput"
-            # Ready-made bodies from samples/. Set {key} to match: NORTH-1 for the stories, CR-12 for the CR.
             examples:
-              fixStory:
-                summary: NORTH-1, fix the story (v2)
-                value: { "fields": { "acceptanceCriteria": "Given an item is in my cart, When I start checkout, Then 1 unit is reserved within 2 seconds.\nGiven a reservation is 15 minutes old, When payment has not completed, Then the unit is released.\nGiven the item is out of stock, When I start checkout, Then I see an out-of-stock message.", "technicalNotes": "Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse." } }
-              scopeCreep:
-                summary: NORTH-1, scope creep (v3, adds a discount)
-                value: { "fields": { "technicalNotes": "Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse. Also apply a discount to reserved items." } }
               crAddWarehouse:
-                summary: CR-12, add Warehouse to the impacted systems (set key to CR-12)
+                summary: CR-12, add Warehouse (key CR-12)
                 value: { "fields": { "impactedSystems": ["Checkout", "Warehouse"] } }
-              crDraft:
-                summary: CR-12, set back to Draft (set key to CR-12)
-                value: { "fields": { "status": "Draft" } }
+              fixStory:
+                summary: NORTH-1, fix the story (key NORTH-1)
+                value: { "fields": { "acceptanceCriteria": "Given an item is in my cart, When I start checkout, Then 1 unit is reserved within 2 seconds.\nGiven a reservation is 15 minutes old, When payment has not completed, Then the unit is released.\nGiven the item is out of stock, When I start checkout, Then I see an out-of-stock message.", "technicalNotes": "Part of CR-12. Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse." } }
+              scopeCreep:
+                summary: NORTH-1, scope creep - adds a discount (key NORTH-1)
+                value: { "fields": { "technicalNotes": "Part of CR-12. Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse. Also apply a discount to reserved items." } }
       responses:
         "204":
-          description: Saved
-        "400":
-          $ref: "#/components/responses/JiraError"
-        "404":
-          $ref: "#/components/responses/JiraError"
+          description: Saved. The card shows Pending until it is checked again (well under a second).
 
-  # Link two issues. "inward Implements outward".
-  /rest/api/v3/issueLink:
-    post:
-      operationId: createLink
-      summary: Link two issues. A content change for both; one webhook each with changelog issuelinks. A duplicate is ignored.
-      parameters:
-        - $ref: "#/components/parameters/Actor"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [type, inwardIssue, outwardIssue]
-              properties:
-                type:
-                  type: object
-                  properties:
-                    name:
-                      type: string
-                      enum: [Implements, Blocks]
-                inwardIssue:
-                  type: object
-                  properties:
-                    key:
-                      type: string
-                      example: NORTH-1
-                outwardIssue:
-                  type: object
-                  properties:
-                    key:
-                      type: string
-                      example: CR-12
-            example: { "type": { "name": "Implements" }, "inwardIssue": { "key": "NORTH-1" }, "outwardIssue": { "key": "CR-12" } }
-      responses:
-        "201":
-          description: Linked (or already linked)
-        "400":
-          $ref: "#/components/responses/JiraError"
-        "404":
-          $ref: "#/components/responses/JiraError"
-
-  # Issue properties, for example readiness. No webhook.
-  /rest/api/v3/issue/{key}/properties/{prop}:
-    parameters:
-      - $ref: "#/components/parameters/Key"
-      - name: prop
-        in: path
-        required: true
-        schema:
-          type: string
-          example: readiness
-    get:
-      operationId: getProperty
-      summary: Read one property
-      responses:
-        "200":
-          description: The property
-          content:
-            application/json:
-              example: { key: readiness, value: { state: Pending, story_updated_at: "2026-11-03T09:00:00.250Z" } }
-        "404":
-          $ref: "#/components/responses/JiraError"
-    put:
-      operationId: setProperty
-      summary: Write one property (any JSON). Never changes fields.updated.
-      parameters:
-        - $ref: "#/components/parameters/Actor"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {}
-            example: { "state": "Pending", "story_updated_at": "2026-11-04T09:00:00.000Z" }
-      responses:
-        "200":
-          description: Saved
-        "404":
-          $ref: "#/components/responses/JiraError"
-
-  # Comments. Plain text in the simulator; real Jira uses ADF. No webhook.
-  /rest/api/v3/issue/{key}/comment:
-    parameters:
-      - $ref: "#/components/parameters/Key"
-    post:
-      operationId: addComment
-      summary: Add a comment
-      parameters:
-        - $ref: "#/components/parameters/Actor"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [body]
-              properties:
-                body:
-                  type: string
-            example: { "body": "Checking the discount question with the PO." }
-      responses:
-        "201":
-          description: Added
-          content:
-            application/json:
-              example: { id: "1" }
-        "400":
-          $ref: "#/components/responses/JiraError"
-        "404":
-          $ref: "#/components/responses/JiraError"
-
-  # The story workflow. Ready for Dev runs the gate.
+  # Steps 4 and 8: try to move the story to Ready for Dev. The gate decides.
   /rest/api/v3/issue/{key}/transitions:
     parameters:
       - $ref: "#/components/parameters/Key"
-    get:
-      operationId: listTransitions
-      summary: The transitions allowed from the current status (none for a CR)
-      responses:
-        "200":
-          description: The transitions
-          content:
-            application/json:
-              example: { transitions: [ { id: "11", name: Refinement }, { id: "21", name: Ready for Dev } ] }
     post:
-      operationId: doTransition
-      summary: >
-        Move a story. 11 Refinement (from any), 21 Ready for Dev (from any; runs the gate),
-        31 In Progress (from Ready for Dev), 41 Done (from In Progress).
-        The gate allows 21 only for a fresh L4 grade with an Implements link to a CR, or a valid override.
-      parameters:
-        - $ref: "#/components/parameters/Actor"
+      tags: ["3. Move to Ready for Dev"]
+      operationId: moveToReadyForDev
+      summary: Move the story to Ready for Dev (allowed only at L4 with a CR, or with an override)
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [transition]
-              properties:
-                transition:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                      example: "21"
-                    name:
-                      type: string
-                      example: Ready for Dev
-                # An architect or product owner can let a story through, with a reason.
-                override:
-                  type: object
-                  required: [by, role, reason]
-                  properties:
-                    by:
-                      type: string
-                      example: lead.architect
-                    role:
-                      type: string
-                      enum: [architect, product-owner]
-                    reason:
-                      type: string
-                      minLength: 5
-            # Ready-made bodies from samples/.
             examples:
               readyForDev:
-                summary: Ready for Dev (runs the gate)
-                value: { "transition": { "id": "21" } }
+                summary: Ready for Dev
+                value: { "to": "Ready for Dev" }
               override:
                 summary: Ready for Dev with an architect's override
-                value: { "transition": { "id": "21" }, "override": { "by": "lead.architect", "role": "architect", "reason": "Agreed with the PO for the demo" } }
-              badOverride:
-                summary: Override with a role that is not allowed (expect 400)
-                value: { "transition": { "id": "21" }, "override": { "by": "dev.user", "role": "developer", "reason": "I want it" } }
-              backToRefinement:
-                summary: Back to Refinement
-                value: { "transition": { "id": "11" } }
-              inProgress:
-                summary: In Progress (only from Ready for Dev)
-                value: { "transition": { "id": "31" } }
+                value: { "to": "Ready for Dev", "override": { "by": "lead.architect", "role": "architect", "reason": "Agreed with the PO for the demo" } }
       responses:
         "204":
-          description: Moved. Webhook jira:issue_updated with changelog status.
+          description: Moved
         "400":
-          description: The gate or the transition table refused
+          description: Blocked by the gate
           content:
             application/json:
-              examples:
-                notReady:
-                  value: { errorMessages: ["This story is not ready for development. See the readiness comment for what is missing."], errors: { readiness: L1 } }
-                badOverride:
-                  value: { errorMessages: ["Override needs an allowed role, a name and a reason of at least 5 characters"], errors: {} }
-                notAllowed:
-                  value: { errorMessages: ["Transition not allowed from Refinement"], errors: {} }
-        "404":
-          $ref: "#/components/responses/JiraError"
+              example: { "errorMessages": ["This story is not ready for development. See the readiness comment for what is missing."], "errors": { "readiness": "L1" } }
 
-  # Search. Only "project = KEY" is supported.
-  /rest/api/v3/search:
-    get:
-      operationId: search
-      summary: Issues of one project, in key order
-      parameters:
-        - name: jql
-          in: query
-          required: true
-          description: Only "project = KEY" (spaces and quotes optional)
-          schema:
-            type: string
-            example: project = LOAD
-        - name: maxResults
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 50
-            maximum: 1000
-      responses:
-        "200":
-          description: The issues
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [total, issues]
-                properties:
-                  total:
-                    type: integer
-                  issues:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Issue"
-        "400":
-          $ref: "#/components/responses/JiraError"
-
-  # The developer board.
+  # Step 9: what developers see.
   /board:
     get:
+      tags: ["5. Developer board"]
       operationId: getBoard
-      summary: Every Story in Ready for Dev that passes the gate rule or has an override
+      summary: Stories in Ready for Dev that passed the gate, or were overridden
       responses:
         "200":
           description: The board
           content:
             application/json:
-              example: { issues: [ { key: NORTH-1, summary: "[Cart] Reserve stock", level: 4, override: false } ] }
-
-  # Delete everything and reset counters.
-  /admin/reset:
-    post:
-      operationId: reset
-      summary: Delete every issue and reset the counters
-      responses:
-        "204":
-          description: Empty again
-
-  # Chaos for the Day 4 breaker demo. Affects only non-GET requests from the bot.
-  /admin/chaos:
-    get:
-      operationId: getChaos
-      summary: The current chaos settings
-      responses:
-        "200":
-          description: Settings
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Chaos"
-    post:
-      operationId: setChaos
-      summary: Change the chaos settings. fail_bot_writes answers 503 "Simulated Jira outage" to the bot.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Chaos"
-            examples:
-              off:
-                summary: Chaos off (normal)
-                value: { "fail_bot_writes": false, "delay_ms": 0 }
-              on:
-                summary: Chaos on (the bot's writes fail with 503)
-                value: { "fail_bot_writes": true, "delay_ms": 0 }
-      responses:
-        "200":
-          description: The new settings
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Chaos"
+              example: { "issues": [{ "key": "NORTH-1", "summary": "[Cart] Reserve stock", "level": "L4", "override": false }] }
 
 components:
-
   parameters:
-    # The issue key, for example NORTH-1 or CR-12.
+    # The issue key: NORTH-1 for the story, CR-12 for the CR.
     Key:
       name: key
       in: path
@@ -450,168 +157,3 @@ components:
       schema:
         type: string
         example: NORTH-1
-    # Who is calling. Missing means ba.user.
-    Actor:
-      name: X-Actor
-      in: header
-      required: false
-      schema:
-        type: string
-        default: ba.user
-
-  responses:
-    # Jira's error shape.
-    JiraError:
-      description: A refusal in Jira's shape
-      content:
-        application/json:
-          schema:
-            type: object
-            required: [errorMessages, errors]
-            properties:
-              errorMessages:
-                type: array
-                items:
-                  type: string
-              errors:
-                type: object
-                additionalProperties:
-                  type: string
-
-  schemas:
-    # Fields a caller may send on create or PUT.
-    IssueFieldsInput:
-      type: object
-      properties:
-        project:
-          type: object
-          properties:
-            key:
-              type: string
-              example: NORTH
-        issuetype:
-          type: object
-          properties:
-            name:
-              type: string
-              enum: [Story, Change Request]
-        summary:
-          type: string
-        # Story fields.
-        asA:
-          type: string
-        iWant:
-          type: string
-        soThat:
-          type: string
-        acceptanceCriteria:
-          type: string
-          description: One line per criterion
-        technicalNotes:
-          type: string
-        dueDate:
-          type: string
-          format: date
-          nullable: true
-        # Change Request fields. status is a simulator shortcut: a plain string.
-        status:
-          type: string
-          example: Approved
-        impactedSystems:
-          type: array
-          items:
-            type: string
-        inScope:
-          type: array
-          items:
-            type: string
-        outOfScope:
-          type: array
-          items:
-            type: string
-        targetDate:
-          type: string
-          format: date
-          nullable: true
-        labels:
-          type: array
-          items:
-            type: string
-
-    # One issue, as GET returns it.
-    Issue:
-      type: object
-      required: [id, key, self, fields, properties]
-      properties:
-        id:
-          type: string
-          example: "10001"
-        key:
-          type: string
-          example: NORTH-1
-        self:
-          type: string
-        fields:
-          type: object
-          properties:
-            project:
-              type: object
-            issuetype:
-              type: object
-            summary:
-              type: string
-            status:
-              type: object
-              properties:
-                name:
-                  type: string
-                  example: Refinement
-            labels:
-              type: array
-              items:
-                type: string
-            # Read-only, built from links. The other issue shows as outwardIssue on the inward side and inwardIssue on the outward side.
-            issuelinks:
-              type: array
-              items:
-                type: object
-            comment:
-              type: object
-              properties:
-                comments:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                      author:
-                        type: object
-                        properties:
-                          accountId:
-                            type: string
-                      body:
-                        type: string
-                      created:
-                        type: string
-                        format: date-time
-            created:
-              type: string
-              format: date-time
-            updated:
-              type: string
-              format: date-time
-        properties:
-          type: object
-          description: Property key to JSON value. Stories always have readiness.
-
-    # The chaos settings.
-    Chaos:
-      type: object
-      properties:
-        fail_bot_writes:
-          type: boolean
-          example: false
-        delay_ms:
-          type: integer
-          example: 0

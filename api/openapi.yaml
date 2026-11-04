@@ -1,522 +1,81 @@
 # A hash sign starts a comment in YAML. The computer ignores these lines.
-# This is the contract of our API gateway: the only door into the Story Readiness Gate.
-# This line says which version of the OpenAPI standard we are using.
+# The public API of our gateway, the only door into the Story Readiness Gate.
+# Only the two calls people use are listed. The gateway also takes Jira's signed webhooks on POST /webhook,
+# and answers /health and /v1/status/intake|reporter for monitoring.
 openapi: 3.0.3
 
-# General information about this API, for humans reading it.
 info:
-  # The name shown at the top of any documentation tool.
   title: Story Readiness Gate API
-  # The version of this contract, not of the code. Bump it when the shape changes.
   version: 1.0.0
-  # What this API is for, who may call it, and the promises it makes.
   description: >
-    Jira sends signed webhooks here, and people and scripts read story readiness here.
-    The gateway checks the API key, applies rate limits, adds a request id and answers errors as JSON.
-    It holds no business rules. Every answer carries X-Request-Id and X-Readiness-Route.
-    Any path not listed below answers 404 route_not_found.
-    Rate limits: webhooks 100 per second per caller address (burst 200); the API 10 per second per key (burst 20).
-    Speed promise: 95% of /v1/* calls answer within 300 ms. The gateway gives up after 2 s to connect and 5 s to read.
+    Read a story's last grade, or ask for it to be checked again. Both need the X-Api-Key header
+    (already filled in Swagger UI). Errors are JSON: {"error", "message", "request_id"}.
 
-# Where the API can be reached.
 servers:
-  # From your laptop.
   - url: http://localhost:9001
     description: Local machine
-  # From another container on the Docker network.
-  - url: http://gateway
-    description: Inside Docker
 
-# Every door this API has. Each door is called a path.
+tags:
+  - name: Readiness
+
 paths:
 
-  # The gateway's own liveness check.
-  /health:
-    # GET means "read something". It must never change anything.
-    get:
-      # A short id for this operation, used by code generators.
-      operationId: getGatewayHealth
-      # One line telling a human what this door does.
-      summary: Is the gateway alive?
-      # No key is needed.
-      security: []
-      # Everything this door can answer.
-      responses:
-        # 200 means "here is your answer, all good".
-        "200":
-          description: The gateway is running
-          headers:
-            X-Request-Id:
-              $ref: "#/components/headers/RequestId"
-            X-Readiness-Route:
-              $ref: "#/components/headers/Route"
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [status, service]
-                properties:
-                  status:
-                    type: string
-                    example: ok
-                  service:
-                    type: string
-                    example: gateway
-
-  # Jira webhooks. Jira signs them; Intake checks the signature.
-  /webhook:
-    # POST means "here is something new for you".
-    post:
-      operationId: receiveJiraWebhook
-      summary: Receive one signed Jira webhook
-      # No API key. The signature in X-Hub-Signature proves the caller.
-      security: []
-      parameters:
-        # The HMAC-SHA256 of the exact body, made with the shared webhook secret.
-        - name: X-Hub-Signature
-          in: header
-          required: true
-          description: "sha256= followed by the hex HMAC-SHA256 of the raw body. In Swagger UI leave it as auto and the page signs the body for you; type anything else to test a forged webhook."
-          schema:
-            type: string
-            example: auto
-      # The body is Jira's webhook JSON.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/JiraWebhook"
-            # Ready to send once NORTH-1 exists: "the BA changed the acceptance criteria".
-            example:
-              webhookEvent: "jira:issue_updated"
-              timestamp: 1793606400123
-              user:
-                accountId: ba.user
-              issue:
-                key: NORTH-1
-                fields:
-                  issuetype:
-                    name: Story
-                  project:
-                    key: NORTH
-              changelog:
-                items:
-                  - field: acceptanceCriteria
-      responses:
-        # 202 means "accepted; the work happens after this answer".
-        "202":
-          description: Accepted. Either events were published, or the webhook was ignored on purpose.
-          headers:
-            X-Request-Id:
-              $ref: "#/components/headers/RequestId"
-            X-Readiness-Route:
-              $ref: "#/components/headers/Route"
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  # Acted on: one StoryChanged per story.
-                  - type: object
-                    required: [accepted, published, event_ids]
-                    properties:
-                      accepted:
-                        type: boolean
-                        example: true
-                      published:
-                        type: integer
-                        example: 1
-                      event_ids:
-                        type: array
-                        items:
-                          type: string
-                          format: uuid
-                  # Ignored on purpose, with the reason.
-                  - type: object
-                    required: [accepted, reason]
-                    properties:
-                      accepted:
-                        type: boolean
-                        example: false
-                      reason:
-                        type: string
-                        enum: [bot_event, no_content_change, cr_without_stories, not_a_story]
-        # 401: the signature is missing or wrong.
-        "401":
-          $ref: "#/components/responses/BadSignature"
-        # 429: too many webhooks from one address.
-        "429":
-          $ref: "#/components/responses/RateLimited"
-        # 502: Intake is not answering.
-        "502":
-          $ref: "#/components/responses/ServiceDown"
-        # 503: Jira did not answer Intake, or validation is paused at the gateway. The simulator retries.
-        "503":
-          description: jira_unavailable (Intake could not read Jira) or validation_paused (Day 5 pause)
-          headers:
-            X-Request-Id:
-              $ref: "#/components/headers/RequestId"
-            X-Readiness-Route:
-              $ref: "#/components/headers/Route"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  # Read one story's readiness.
+  # The last grade of one story.
   /v1/stories/{key}/readiness:
     get:
+      tags: ["Readiness"]
       operationId: getStoryReadiness
       summary: The last grade of one story
-      # The API key is needed.
       security:
         - ReadinessApiKey: []
       parameters:
         - $ref: "#/components/parameters/StoryKey"
       responses:
         "200":
-          description: The story's last grade
-          headers:
-            X-Request-Id:
-              $ref: "#/components/headers/RequestId"
-            X-Readiness-Route:
-              $ref: "#/components/headers/Route"
+          description: The grade
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/Grade"
-        # 401: no key, or the wrong key.
+              example: { "state": "Graded", "level": 4, "failed": [], "warnings": [{ "id": "I-SEC-01", "level": 4, "message": "Needs security review: payment" }], "teams": ["Checkout Team", "Warehouse Team"] }
         "401":
-          $ref: "#/components/responses/InvalidApiKey"
-        # 404: the story has not been graded yet.
+          description: invalid_api_key
         "404":
           description: not_graded
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              example:
-                error: not_graded
-                message: No grade yet for NORTH-99
-                request_id: 7f0c2b8e4a1d4e6f9b3c5d7e9f1a2b3c
-        "429":
-          $ref: "#/components/responses/RateLimited"
-        "502":
-          $ref: "#/components/responses/ServiceDown"
 
   # Ask for one story to be checked again.
   /v1/stories/{key}/recheck:
     post:
+      tags: ["Readiness"]
       operationId: recheckStory
-      summary: Publish a fresh StoryChanged for one story
+      summary: Check one story again
       security:
         - ReadinessApiKey: []
       parameters:
         - $ref: "#/components/parameters/StoryKey"
       responses:
         "202":
-          description: A StoryChanged was published
-          headers:
-            X-Request-Id:
-              $ref: "#/components/headers/RequestId"
-            X-Readiness-Route:
-              $ref: "#/components/headers/Route"
+          description: A new check was started
           content:
             application/json:
-              schema:
-                type: object
-                required: [published, event_id]
-                properties:
-                  published:
-                    type: integer
-                    example: 1
-                  event_id:
-                    type: string
-                    format: uuid
+              example: { "published": 1, "event_id": "3922afb6-9de3-4738-b533-35e6da7917a1" }
         "401":
-          $ref: "#/components/responses/InvalidApiKey"
-        # 404: no story has that key.
+          description: invalid_api_key
         "404":
           description: story_not_found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        # 405: only POST is allowed here.
-        "405":
-          description: method_not_allowed
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-        "502":
-          $ref: "#/components/responses/ServiceDown"
-        # 503: Jira or the event log is not answering Intake.
-        "503":
-          description: jira_unavailable or publish_failed
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
 
-  # Is Intake ready? No key: it says nothing private.
-  /v1/status/intake:
-    get:
-      operationId: getIntakeStatus
-      summary: Intake's readiness (its /ready)
-      security: []
-      responses:
-        "200":
-          $ref: "#/components/responses/Ready"
-        "502":
-          $ref: "#/components/responses/ServiceDown"
-        "503":
-          $ref: "#/components/responses/NotReady"
-
-  # Is the Reporter ready? No key: it says nothing private.
-  /v1/status/reporter:
-    get:
-      operationId: getReporterStatus
-      summary: The Reporter's readiness (its /ready)
-      security: []
-      responses:
-        "200":
-          $ref: "#/components/responses/Ready"
-        "502":
-          $ref: "#/components/responses/ServiceDown"
-        "503":
-          $ref: "#/components/responses/NotReady"
-
-# Shapes and answers used by more than one path.
 components:
-
-  # How a caller proves who they are.
+  # The API key, sent in the X-Api-Key header. Its value comes from READINESS_API_KEY.
   securitySchemes:
-    # The API key, sent in the X-Api-Key header. Its value comes from READINESS_API_KEY.
     ReadinessApiKey:
       type: apiKey
       in: header
       name: X-Api-Key
-
-  # Values in the path.
   parameters:
     # A Jira story key, for example NORTH-1. Anything else is a 404 from the gateway.
     StoryKey:
       name: key
       in: path
       required: true
-      description: A story key such as NORTH-1
       schema:
         type: string
         pattern: "^[A-Z][A-Z0-9]*-[0-9]+$"
         example: NORTH-1
-
-  # Headers on every answer.
-  headers:
-    # The id the gateway gives every call. Every service logs it.
-    RequestId:
-      description: One id per call, logged by every service
-      schema:
-        type: string
-    # Which service answered: gateway, intake, reporter, paused or none.
-    Route:
-      description: gateway, intake, reporter, paused or none
-      schema:
-        type: string
-        enum: [gateway, intake, reporter, paused, none]
-
-  # Answers used by more than one path.
-  responses:
-    # The key is missing or wrong.
-    InvalidApiKey:
-      description: invalid_api_key
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-          example:
-            error: invalid_api_key
-            message: Send a valid X-Api-Key header
-            request_id: 7f0c2b8e4a1d4e6f9b3c5d7e9f1a2b3c
-    # The webhook signature is missing or wrong.
-    BadSignature:
-      description: bad_signature
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-    # Too many calls.
-    RateLimited:
-      description: rate_limited
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-          example:
-            error: rate_limited
-            message: Too many requests. Wait and retry.
-            request_id: 7f0c2b8e4a1d4e6f9b3c5d7e9f1a2b3c
-    # The service behind the gateway is not answering.
-    ServiceDown:
-      description: service_unavailable
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-          example:
-            error: service_unavailable
-            message: A readiness service is not answering. Retry in a minute.
-            request_id: 7f0c2b8e4a1d4e6f9b3c5d7e9f1a2b3c
-    # A service is ready.
-    Ready:
-      description: The service and its own dependencies work
-      content:
-        application/json:
-          schema:
-            type: object
-            required: [ready]
-            properties:
-              ready:
-                type: boolean
-                example: true
-              service:
-                type: string
-                example: reporter
-    # A service is alive but not ready.
-    NotReady:
-      description: The service is running but a dependency is not
-      content:
-        application/json:
-          schema:
-            type: object
-            required: [ready, reason]
-            properties:
-              ready:
-                type: boolean
-                example: false
-              reason:
-                type: string
-                example: redis_not_connected
-
-  # Data shapes.
-  schemas:
-    # Every error: a machine code, a human message and the request id.
-    Error:
-      type: object
-      required: [error, message, request_id]
-      properties:
-        error:
-          type: string
-          # A fixed machine-readable code. Callers match on this, not on the message.
-          enum: [invalid_api_key, bad_signature, rate_limited, service_unavailable, jira_unavailable, validation_paused, not_graded, story_not_found, method_not_allowed, route_not_found, publish_failed, store_unavailable, invalid_json]
-        message:
-          type: string
-        request_id:
-          type: string
-          nullable: true
-
-    # Jira's webhook body, as the simulator sends it.
-    JiraWebhook:
-      type: object
-      required: [webhookEvent, user, issue, changelog]
-      properties:
-        webhookEvent:
-          type: string
-          enum: ["jira:issue_created", "jira:issue_updated"]
-        timestamp:
-          type: integer
-        user:
-          type: object
-          properties:
-            accountId:
-              type: string
-              example: ba.user
-        issue:
-          type: object
-          properties:
-            key:
-              type: string
-              example: NORTH-1
-            fields:
-              type: object
-        changelog:
-          type: object
-          properties:
-            items:
-              type: array
-              items:
-                type: object
-                properties:
-                  field:
-                    type: string
-                    example: acceptanceCriteria
-
-    # One failed check, as a grade lists it.
-    FailedCheck:
-      type: object
-      required: [id, level, message]
-      properties:
-        id:
-          type: string
-          example: R-AC-01
-        level:
-          type: integer
-          example: 2
-        message:
-          type: string
-          example: 1 criteria are not Given/When/Then
-
-    # A story's grade: the readiness value the Reporter writes to Jira.
-    Grade:
-      type: object
-      required: [state, level, story_updated_at, source_event_id, checked_at, failed, warnings, impacted_containers, impacted_names, teams, labels]
-      properties:
-        state:
-          type: string
-          enum: [Graded]
-        level:
-          type: integer
-          minimum: 0
-          maximum: 4
-          example: 1
-        story_updated_at:
-          type: string
-          format: date-time
-        source_event_id:
-          type: string
-          format: uuid
-        checked_at:
-          type: string
-          format: date-time
-        # Failed blocking checks, sorted by level then id.
-        failed:
-          type: array
-          items:
-            $ref: "#/components/schemas/FailedCheck"
-        # Failed warnings. They never lower the level.
-        warnings:
-          type: array
-          items:
-            $ref: "#/components/schemas/FailedCheck"
-        impacted_containers:
-          type: array
-          items:
-            type: string
-          example: [checkout, warehouse]
-        impacted_names:
-          type: array
-          items:
-            type: string
-          example: [Checkout Service, Warehouse Service]
-        teams:
-          type: array
-          items:
-            type: string
-          example: [Checkout Team, Warehouse Team]
-        labels:
-          type: array
-          items:
-            type: string
-          example: []

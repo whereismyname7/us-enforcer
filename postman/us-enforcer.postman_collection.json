@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Story Readiness Gate (us-enforcer)",
-    "description": "Requests for the Jira simulator (port 9000) and the API gateway (port 9001).\nStart the stack first: docker compose up -d --build --wait\nRun folder 1 in order (Collection Runner) to walk one story from L1 to L4 and back. Grading is asynchronous, so requests that read a grade wait 1.5-2 s first.",
+    "description": "The story flow, in order. Run it with the Collection Runner on a fresh stack.\nStart: docker compose up -d --build --wait\nStart over: docker compose restart jira-sim",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -16,1535 +16,564 @@
     {
       "key": "apiKey",
       "value": "dev-only-api-key"
-    },
-    {
-      "key": "webhookSecret",
-      "value": "dev-only-change-me"
     }
   ],
   "item": [
     {
-      "name": "0. Health and readiness",
-      "item": [
-        {
-          "name": "Gateway health",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{gateway}}/health",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "health"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"request id header\", function () { pm.response.to.have.header(\"X-Request-Id\"); });"
-                ]
-              }
-            }
+      "name": "1. Create CR-12",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue"
           ]
         },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"key\": \"CR-12\",\n  \"fields\": {\n    \"project\": {\n      \"key\": \"CR\"\n    },\n    \"issuetype\": {\n      \"name\": \"Change Request\"\n    },\n    \"summary\": \"Customers can reserve stock during checkout\",\n    \"status\": \"Approved\",\n    \"impactedSystems\": [\n      \"Checkout\"\n    ],\n    \"inScope\": [\n      \"reserve stock during checkout\",\n      \"release unpaid reservations\"\n    ],\n    \"outOfScope\": [\n      \"discount\",\n      \"delivery fee\"\n    ],\n    \"targetDate\": \"2026-12-15\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
         {
-          "name": "Intake ready (through gateway)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{gateway}}/v1/status/intake",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "status",
-                "intake"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Reporter ready (through gateway)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{gateway}}/v1/status/reporter",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "status",
-                "reporter"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Jira simulator health",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/health",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "health"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
-          ]
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 201\", function () { pm.response.to.have.status(201); });"
+            ]
+          }
         }
       ]
     },
     {
-      "name": "1. Story flow (run in order)",
-      "item": [
-        {
-          "name": "Reset the simulator",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/admin/reset",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "admin",
-                "reset"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
-                ]
-              }
-            }
+      "name": "2. Create NORTH-1 (weak story)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue"
           ]
         },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"key\": \"NORTH-1\",\n  \"fields\": {\n    \"project\": {\n      \"key\": \"NORTH\"\n    },\n    \"issuetype\": {\n      \"name\": \"Story\"\n    },\n    \"summary\": \"[Cart] Reserve stock\",\n    \"asA\": \"customer\",\n    \"iWant\": \"my items reserved\",\n    \"soThat\": \"they don't sell out\",\n    \"acceptanceCriteria\": \"Stock should be reserved quickly at checkout. Reservation time TBD.\",\n    \"technicalNotes\": \"Part of CR-12.\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
         {
-          "name": "Chaos off",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/admin/chaos",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "admin",
-                "chaos"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{ \"fail_bot_writes\": false, \"delay_ms\": 0 }",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Create CR-12 (approved, Checkout only)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"key\": \"CR-12\",\n  \"fields\": {\n    \"project\": { \"key\": \"CR\" },\n    \"issuetype\": { \"name\": \"Change Request\" },\n    \"summary\": \"Customers can reserve stock during checkout\",\n    \"status\": \"Approved\",\n    \"impactedSystems\": [\"Checkout\"],\n    \"inScope\": [\"reserve stock during checkout\", \"release unpaid reservations\"],\n    \"outOfScope\": [\"discount\", \"delivery fee\"],\n    \"targetDate\": \"2026-12-15\"\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 201\", function () { pm.response.to.have.status(201); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Create weak story NORTH-1",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"key\": \"NORTH-1\",\n  \"fields\": {\n    \"project\": { \"key\": \"NORTH\" },\n    \"issuetype\": { \"name\": \"Story\" },\n    \"summary\": \"[Cart] Reserve stock\",\n    \"asA\": \"customer\",\n    \"iWant\": \"my items reserved\",\n    \"soThat\": \"they don't sell out\",\n    \"acceptanceCriteria\": \"Stock should be reserved quickly at checkout. Reservation time TBD.\"\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 201\", function () { pm.response.to.have.status(201); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Link NORTH-1 to CR-12",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issueLink",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issueLink"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{ \"type\": { \"name\": \"Implements\" }, \"inwardIssue\": { \"key\": \"NORTH-1\" }, \"outwardIssue\": { \"key\": \"CR-12\" } }",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 201\", function () { pm.response.to.have.status(201); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Get NORTH-1 (expect L1)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Grading is asynchronous: give the services a moment.",
-                  "setTimeout(function () {}, 1500);"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
-                  "const r = pm.response.json().properties.readiness;",
-                  "pm.test(\"graded L1\", function () { pm.expect(r.state).to.eql(\"Graded\"); pm.expect(r.level).to.eql(1); });",
-                  "pm.test(\"8 blocking items\", function () { pm.expect(r.failed.length).to.eql(8); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Readiness via gateway (expect L1)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-Api-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "url": {
-              "raw": "{{gateway}}/v1/stories/NORTH-1/readiness",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "stories",
-                "NORTH-1",
-                "readiness"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"level 1\", function () { pm.expect(pm.response.json().level).to.eql(1); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Ready for Dev (blocked, 400)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1",
-                "transitions"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{ \"transition\": { \"id\": \"21\" } }",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 400\", function () { pm.response.to.have.status(400); });",
-                  "pm.test(\"readiness L1\", function () { pm.expect(pm.response.json().errors.readiness).to.eql(\"L1\"); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Update CR-12 (add Warehouse)",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/CR-12",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "CR-12"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{ \"fields\": { \"impactedSystems\": [\"Checkout\", \"Warehouse\"] } }",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Fix the story (v2)",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fields\": {\n    \"acceptanceCriteria\": \"Given an item is in my cart, When I start checkout, Then 1 unit is reserved within 2 seconds.\\nGiven a reservation is 15 minutes old, When payment has not completed, Then the unit is released.\\nGiven the item is out of stock, When I start checkout, Then I see an out-of-stock message.\",\n    \"technicalNotes\": \"Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse.\"\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Get NORTH-1 (expect L4)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Grading is asynchronous: give the services a moment.",
-                  "setTimeout(function () {}, 2000);"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
-                  "const r = pm.response.json().properties.readiness;",
-                  "pm.test(\"graded L4\", function () { pm.expect(r.state).to.eql(\"Graded\"); pm.expect(r.level).to.eql(4); });",
-                  "pm.test(\"one warning: I-SEC-01\", function () { pm.expect(r.warnings.map(function (w) { return w.id; })).to.eql([\"I-SEC-01\"]); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Ready for Dev (allowed, 204)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1",
-                "transitions"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{ \"transition\": { \"id\": \"21\" } }",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Developer board (lists NORTH-1)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/board",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "board"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"NORTH-1 on the board\", function () { pm.expect(pm.response.json().issues.map(function (i) { return i.key; })).to.include(\"NORTH-1\"); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Scope creep: add a discount (v3)",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fields\": {\n    \"technicalNotes\": \"Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse. Also apply a discount to reserved items.\"\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Get NORTH-1 (expect L3, moved back)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Grading is asynchronous: give the services a moment.",
-                  "setTimeout(function () {}, 2000);"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
-                  "const r = pm.response.json().properties.readiness;",
-                  "pm.test(\"graded L3\", function () { pm.expect(r.state).to.eql(\"Graded\"); pm.expect(r.level).to.eql(3); });",
-                  "pm.test(\"back in Refinement\", function () { pm.expect(pm.response.json().fields.status.name).to.eql(\"Refinement\"); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Override by the architect (204)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1",
-                "transitions"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{ \"transition\": { \"id\": \"21\" }, \"override\": { \"by\": \"lead.architect\", \"role\": \"architect\", \"reason\": \"Agreed with the PO for the demo\" } }",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Developer board (override true)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/board",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "board"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
-                  "pm.test(\"NORTH-1 overridden\", function () { const i = pm.response.json().issues.find(function (x) { return x.key === \"NORTH-1\"; }); pm.expect(i.override).to.eql(true); });"
-                ]
-              }
-            }
-          ]
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 201\", function () { pm.response.to.have.status(201); });"
+            ]
+          }
         }
       ]
     },
     {
-      "name": "2. Gateway API",
-      "item": [
-        {
-          "name": "Readiness without key (401)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{gateway}}/v1/stories/NORTH-1/readiness",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "stories",
-                "NORTH-1",
-                "readiness"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 401\", function () { pm.response.to.have.status(401); });",
-                  "pm.test(\"invalid_api_key\", function () { pm.expect(pm.response.json().error).to.eql(\"invalid_api_key\"); });"
-                ]
-              }
-            }
+      "name": "3. Read NORTH-1 (L1)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue",
+            "NORTH-1"
           ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Checking runs in the background: give it a moment.",
+              "setTimeout(function () {}, 1500);"
+            ]
+          }
         },
         {
-          "name": "Readiness with key",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-Api-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "url": {
-              "raw": "{{gateway}}/v1/stories/NORTH-1/readiness",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "stories",
-                "NORTH-1",
-                "readiness"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Readiness of an ungraded story (404)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-Api-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "url": {
-              "raw": "{{gateway}}/v1/stories/NORTH-99/readiness",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "stories",
-                "NORTH-99",
-                "readiness"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 404\", function () { pm.response.to.have.status(404); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Recheck NORTH-1 (202)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-Api-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "url": {
-              "raw": "{{gateway}}/v1/stories/NORTH-1/recheck",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "stories",
-                "NORTH-1",
-                "recheck"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 202\", function () { pm.response.to.have.status(202); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Recheck with GET (405)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "X-Api-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "url": {
-              "raw": "{{gateway}}/v1/stories/NORTH-1/recheck",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "stories",
-                "NORTH-1",
-                "recheck"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 405\", function () { pm.response.to.have.status(405); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Recheck an unknown story (404)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-Api-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "url": {
-              "raw": "{{gateway}}/v1/stories/NORTH-99/recheck",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "stories",
-                "NORTH-99",
-                "recheck"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 404\", function () { pm.response.to.have.status(404); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Signed webhook, as Jira sends it (202)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Hub-Signature",
-                "value": "{{webhookSignature}}"
-              }
-            ],
-            "url": {
-              "raw": "{{gateway}}/webhook",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "webhook"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{{webhookBody}}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "The pre-request script builds the body and signs it with HMAC-SHA256 using webhookSecret, exactly like the simulator does."
-          },
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "// Build the webhook body and sign it the way Jira (the simulator) does.",
-                  "const body = JSON.stringify({ webhookEvent: \"jira:issue_updated\", timestamp: Date.now(), user: { accountId: \"ba.user\" }, issue: { key: \"NORTH-1\", fields: { issuetype: { name: \"Story\" }, project: { key: \"NORTH\" } } }, changelog: { items: [{ field: \"acceptanceCriteria\" }] } });",
-                  "pm.variables.set(\"webhookBody\", body);",
-                  "const sig = CryptoJS.HmacSHA256(body, pm.collectionVariables.get(\"webhookSecret\")).toString(CryptoJS.enc.Hex);",
-                  "pm.variables.set(\"webhookSignature\", \"sha256=\" + sig);"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 202\", function () { pm.response.to.have.status(202); });",
-                  "pm.test(\"published one event\", function () { pm.expect(pm.response.json().published).to.eql(1); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Forged webhook (401)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Hub-Signature",
-                "value": "sha256=00"
-              }
-            ],
-            "url": {
-              "raw": "{{gateway}}/webhook",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "webhook"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 401\", function () { pm.response.to.have.status(401); });",
-                  "pm.test(\"bad_signature\", function () { pm.expect(pm.response.json().error).to.eql(\"bad_signature\"); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Unknown route (404 JSON)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{gateway}}/nope",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "nope"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 404\", function () { pm.response.to.have.status(404); });",
-                  "pm.test(\"route_not_found\", function () { pm.expect(pm.response.json().error).to.eql(\"route_not_found\"); });"
-                ]
-              }
-            }
-          ]
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
+              "const card = pm.response.json();",
+              "pm.test(\"level L1\", function () { pm.expect(card.level).to.eql(\"L1\"); });",
+              "pm.test(\"8 missing items\", function () { pm.expect(card.missing.length).to.eql(8); });"
+            ]
+          }
         }
       ]
     },
     {
-      "name": "3. Jira outage demo (breaker and outbox)",
-      "item": [
-        {
-          "name": "Chaos on: bot writes fail",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/admin/chaos",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "admin",
-                "chaos"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{ \"fail_bot_writes\": true, \"delay_ms\": 0 }",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
+      "name": "4. Move NORTH-1 to Ready for Dev (blocked)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue",
+            "NORTH-1",
+            "transitions"
           ]
         },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"Ready for Dev\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
         {
-          "name": "Recheck NORTH-1 (write fails, goes to outbox)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "X-Api-Key",
-                "value": "{{apiKey}}"
-              }
-            ],
-            "url": {
-              "raw": "{{gateway}}/v1/stories/NORTH-1/recheck",
-              "host": [
-                "{{gateway}}"
-              ],
-              "path": [
-                "v1",
-                "stories",
-                "NORTH-1",
-                "recheck"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 202\", function () { pm.response.to.have.status(202); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Read chaos settings",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/admin/chaos",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "admin",
-                "chaos"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Chaos off: outbox flushes after ~10 s",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/admin/chaos",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "admin",
-                "chaos"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{ \"fail_bot_writes\": false, \"delay_ms\": 0 }",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "Watch it with: docker compose logs -f reporter"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
-          ]
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 400\", function () { pm.response.to.have.status(400); });",
+              "pm.test(\"blocked at L1\", function () { pm.expect(pm.response.json().errors.readiness).to.eql(\"L1\"); });"
+            ]
+          }
         }
       ]
     },
     {
-      "name": "4. Jira simulator extras",
-      "item": [
-        {
-          "name": "List transitions for NORTH-1",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1",
-                "transitions"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
+      "name": "5. Update CR-12 (add Warehouse)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue/CR-12",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue",
+            "CR-12"
           ]
         },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fields\": {\n    \"impactedSystems\": [\n      \"Checkout\",\n      \"Warehouse\"\n    ]\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
         {
-          "name": "Read the readiness property",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/properties/readiness",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1",
-                "properties",
-                "readiness"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Update NORTH-1 (fix the story)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue",
+            "NORTH-1"
           ]
         },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fields\": {\n    \"acceptanceCriteria\": \"Given an item is in my cart, When I start checkout, Then 1 unit is reserved within 2 seconds.\\nGiven a reservation is 15 minutes old, When payment has not completed, Then the unit is released.\\nGiven the item is out of stock, When I start checkout, Then I see an out-of-stock message.\",\n    \"technicalNotes\": \"Part of CR-12. Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse.\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
         {
-          "name": "Search project NORTH",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/search?jql=project%20%3D%20NORTH&maxResults=50",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "search"
-              ],
-              "query": [
-                {
-                  "key": "jql",
-                  "value": "project%20%3D%20NORTH"
-                },
-                {
-                  "key": "maxResults",
-                  "value": "50"
-                }
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
-                ]
-              }
-            }
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Read NORTH-1 (L4)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue",
+            "NORTH-1"
           ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Checking runs in the background: give it a moment.",
+              "setTimeout(function () {}, 1500);"
+            ]
+          }
         },
         {
-          "name": "Add a comment as a BA",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Actor",
-                "value": "ba.user"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/comment",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue",
-                "NORTH-1",
-                "comment"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{ \"body\": \"Looking at the discount question with the PO.\" }",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 201\", function () { pm.response.to.have.status(201); });"
-                ]
-              }
-            }
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
+              "const card = pm.response.json();",
+              "pm.test(\"level L4\", function () { pm.expect(card.level).to.eql(\"L4\"); });",
+              "pm.test(\"nothing missing\", function () { pm.expect(card.missing).to.eql([]); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Move NORTH-1 to Ready for Dev (allowed)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue",
+            "NORTH-1",
+            "transitions"
           ]
         },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"Ready for Dev\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
         {
-          "name": "Create gift-wrap story NORTH-2 (no CR, ends L2)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{jira}}/rest/api/v3/issue",
-              "host": [
-                "{{jira}}"
-              ],
-              "path": [
-                "rest",
-                "api",
-                "v3",
-                "issue"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"key\": \"NORTH-2\",\n  \"fields\": {\n    \"project\": { \"key\": \"NORTH\" },\n    \"issuetype\": { \"name\": \"Story\" },\n    \"summary\": \"[Checkout] Add gift wrap\",\n    \"asA\": \"customer\",\n    \"iWant\": \"to add gift wrap to my order\",\n    \"soThat\": \"my gift arrives ready to give\",\n    \"acceptanceCriteria\": \"Given an item is in my cart, When I select gift wrap, Then a fee of 10 SAR is added.\\nGiven gift wrap is unavailable, When I select it, Then I see an unavailable message.\"\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"status 201\", function () { pm.response.to.have.status(201); });"
-                ]
-              }
-            }
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Developer board (NORTH-1)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{jira}}/board",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "board"
           ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"NORTH-1 on the board\", function () { pm.expect(pm.response.json().issues.map(function (i) { return i.key; })).to.include(\"NORTH-1\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Update NORTH-1 (scope creep)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue",
+            "NORTH-1"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fields\": {\n    \"technicalNotes\": \"Part of CR-12. Checkout publishes a StockReserved event to Warehouse. Data owner: Warehouse. Also apply a discount to reserved items.\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Read NORTH-1 (L3, moved back, one comment)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue",
+            "NORTH-1"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Checking runs in the background: give it a moment.",
+              "setTimeout(function () {}, 1500);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });",
+              "const card = pm.response.json();",
+              "pm.test(\"level L3\", function () { pm.expect(card.level).to.eql(\"L3\"); });",
+              "pm.test(\"back in Refinement\", function () { pm.expect(card.status).to.eql(\"Refinement\"); });",
+              "pm.test(\"newest comment says moved back\", function () { pm.expect(card.comments[0].body.indexOf(\"Moved back to Refinement\")).to.eql(0); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Move NORTH-1 with an override",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
+          "host": [
+            "{{jira}}"
+          ],
+          "path": [
+            "rest",
+            "api",
+            "v3",
+            "issue",
+            "NORTH-1",
+            "transitions"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"Ready for Dev\",\n  \"override\": {\n    \"by\": \"lead.architect\",\n    \"role\": \"architect\",\n    \"reason\": \"Agreed with the PO for the demo\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 204\", function () { pm.response.to.have.status(204); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Readiness via the gateway",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Api-Key",
+            "value": "{{apiKey}}"
+          }
+        ],
+        "url": {
+          "raw": "{{gateway}}/v1/stories/NORTH-1/readiness",
+          "host": [
+            "{{gateway}}"
+          ],
+          "path": [
+            "v1",
+            "stories",
+            "NORTH-1",
+            "readiness"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
         }
       ]
     }

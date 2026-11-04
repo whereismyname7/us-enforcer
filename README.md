@@ -214,7 +214,7 @@ Render the C4 diagrams with `docker compose run --rm diagrams`. Stop everything 
 docker compose up -d swagger
 ```
 
-Open http://localhost:9002. Pick **Gateway API** or **Jira simulator** at the top right. Every request is prefilled: pick a ready-made body from **Examples**, then click **Execute**. The API key is already authorized, and webhooks are signed for you when `X-Hub-Signature` is left as `auto`. The same requests are also in `postman/us-enforcer.postman_collection.json`.
+Open http://localhost:9002. The **Story flow** page lists the steps in order: 1 Create, 2 Read the card, 3 Move to Ready for Dev, 4 Update, 5 Developer board. The page description says which example to pick at each step. Every request is prefilled: pick a body from **Examples**, then click **Execute**. The readiness API (second page) has its key already authorized. The same flow is in `postman/us-enforcer.postman_collection.json`. To start over: `docker compose restart jira-sim`.
 
 ---
 
@@ -225,7 +225,7 @@ The [example](#example-one-story-end-to-end) above, run against the simulator.
 **Create the CR and a weak story**
 
 ```bash
-curl -X POST http://localhost:9000/admin/reset
+docker compose restart jira-sim
 curl -X POST http://localhost:9000/rest/api/v3/issue -H "Content-Type: application/json" --data-binary "@samples/crs/CR-12.json"
 curl -X POST http://localhost:9000/rest/api/v3/issue -H "Content-Type: application/json" --data-binary "@samples/stories/reserve-stock-v1.json"
 curl -X POST http://localhost:9000/rest/api/v3/issueLink -H "Content-Type: application/json" --data-binary "@samples/link-NORTH-1-CR-12.json"
@@ -238,7 +238,7 @@ curl http://localhost:9000/rest/api/v3/issue/NORTH-1
 curl -H "X-Api-Key: dev-only-api-key" http://localhost:9001/v1/stories/NORTH-1/readiness
 ```
 
-→ `"level":1` and a comment listing 8 blocking items. The service logs show `published`, `checked` twice and `graded`, all with the same `story_key`.
+→ the card starts with `"level":"L1"` and lists 8 `missing` items, and the newest comment explains them. The service logs show `published`, `checked` twice and `graded`, all with the same `story_key`.
 
 **The gate blocks it**
 
@@ -256,7 +256,7 @@ curl -X PUT http://localhost:9000/rest/api/v3/issue/NORTH-1 -H "Content-Type: ap
 curl http://localhost:9000/rest/api/v3/issue/NORTH-1
 ```
 
-→ `"state":"Pending"` straight after the edit, then `"level":4` with one warning, `Needs security review: payment`.
+→ `"level":"Pending"` straight after the edit, then `"level":"L4"` with one warning, `Needs security review: payment`.
 
 **The gate opens and developers see it**
 
@@ -274,7 +274,7 @@ curl -X PUT http://localhost:9000/rest/api/v3/issue/NORTH-1 -H "Content-Type: ap
 curl http://localhost:9000/rest/api/v3/issue/NORTH-1
 ```
 
-→ `"level":3`, `"discount" is out of scope for CR-12`, status back to `Refinement`, and an empty board.
+→ `"level":"L3"`, `"discount" is out of scope for CR-12`, status back to `Refinement`, one comment saying so, and an empty board.
 
 ---
 
@@ -289,7 +289,7 @@ docker compose start impact
 curl http://localhost:9000/rest/api/v3/issue/NORTH-2
 ```
 
-→ Pending while Impact is down, then `"level":2` (no CR linked) after it restarts.
+→ `"level":"Pending"` while Impact is down, then `"level":"L2"` (no CR linked) after it restarts.
 
 **Horizontal scale.** `docker compose up -d --scale rules=3 --wait` runs three Rules copies in one consumer group.
 

@@ -12,61 +12,44 @@
   <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"></script>
   <script>
-    // The dev-only defaults from docker-compose.yml. Never a real secret.
+    // The dev-only default from docker-compose.yml. Never a real secret.
     const API_KEY_VALUE = "dev-only-api-key";
-    const SIGNING_VALUE = "dev-only-change-me";
 
-    // The servers listed in the OpenAPI files, and where this page forwards them.
+    // The servers listed in the OpenAPI files, and where this page forwards them (no CORS needed).
     const FORWARDS = [
       ["http://localhost:9001", "/gateway"],
-      ["http://gateway", "/gateway"],
-      ["http://localhost:9000", "/jira"],
-      ["http://jira-sim:3000", "/jira"]
+      ["http://localhost:9000", "/jira"]
     ];
 
-    // HMAC-SHA256 of a text, as hex: the same signature Jira (the simulator) puts on webhooks.
-    async function hmacHex(text) {
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey("raw", enc.encode(SIGNING_VALUE), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-      const sig = await crypto.subtle.sign("HMAC", key, enc.encode(text));
-      return Array.from(new Uint8Array(sig)).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
-    }
-
-    // Before each "Try it out" call: send it through this page's forwarder,
-    // and sign webhook bodies when the signature field is left as "auto".
-    async function prepare(req) {
+    // Before each "Try it out" call: send it through this page's forwarder.
+    function prepare(req) {
       for (const pair of FORWARDS) {
         if (req.url.indexOf(pair[0]) === 0) {
           req.url = pair[1] + req.url.slice(pair[0].length);
           break;
         }
       }
-      const isWebhook = /\/gateway\/webhook$/.test(req.url.split("?")[0]);
-      const given = req.headers["X-Hub-Signature"];
-      if (isWebhook && (!given || given === "auto")) {
-        const body = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-        req.body = body;
-        req.headers["X-Hub-Signature"] = "sha256=" + (await hmacHex(body));
-      }
       return req;
     }
 
-    // Build the page with both contracts, the gateway API first.
+    // Build the page. The story flow comes first; its steps are already in run order.
     window.ui = SwaggerUIBundle({
       urls: [
-        { url: "specs/openapi.yaml", name: "Gateway API (port 9001)" },
-        { url: "specs/jira-sim-openapi.yaml", name: "Jira simulator (port 9000)" }
+        { url: "specs/jira-sim-openapi.yaml", name: "Story flow (Jira simulator)" },
+        { url: "specs/openapi.yaml", name: "Readiness API (gateway)" }
       ],
-      "urls.primaryName": "Gateway API (port 9001)",
+      "urls.primaryName": "Story flow (Jira simulator)",
       dom_id: "#swagger-ui",
       presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
       layout: "StandaloneLayout",
       deepLinking: true,
+      docExpansion: "list",
+      defaultModelsExpandDepth: -1,
       tryItOutEnabled: true,
       displayRequestDuration: true,
       persistAuthorization: true,
       requestInterceptor: prepare,
-      // Fill in the API key, so the protected routes work straight away.
+      // Fill in the API key, so the readiness API works straight away.
       onComplete: function () { window.ui.preauthorizeApiKey("ReadinessApiKey", API_KEY_VALUE); }
     });
   </script>
