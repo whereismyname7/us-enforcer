@@ -2,30 +2,33 @@
 !include <C4/C4_Container>
 
 title Story Readiness Gate - Containers (C4 Level 2)
-LAYOUT_WITH_LEGEND()
+skinparam linetype polyline
+HIDE_STEREOTYPE()
 
 Person(ba, "Business Analyst", "Writes stories and CRs")
-Person(developer, "Developer", "Picks L4 stories")
-System_Ext(jira, "Jira", "Simulated by jira-sim: stories, CRs, the L4 gate, the board")
+System_Ext(jira, "Jira", "Stories, CRs, the L4 gate and the board. Simulated by jira-sim")
+Person(dev, "Developer", "Picks L4 stories")
+Person(architect, "Architect", "Owns the rules and the target architecture")
 
 System_Boundary(srg, "Story Readiness Gate") {
-  Container(gateway, "Gateway", "nginx", "The only door in. Routes and API key. No business rules.")
-  Container(intake, "Intake", "Node.js", "Anti-corruption layer: translates Jira fields, adds CR data, publishes StoryChanged")
-  Container(checker, "Checker", "Node.js", "Checks a story against the rules and the target's containers and ADRs. Owns rules.yaml")
-  Container(reporter, "Reporter", "Node.js", "Turns results into L0-L4 and is the only writer to Jira")
-  ContainerDb(events, "Event Log", "Redpanda, Kafka protocol", "readiness.story-changes and readiness.check-results")
+  Container(gateway, "Gateway", "nginx", "The only door in: routes and API key")
+  Container(intake, "Intake", "Node.js", "Anti-corruption layer: Jira fields stop here")
+  ContainerQueue(events, "Event Log", "Redpanda", "readiness.story-changes\nreadiness.check-results")
+  Container(checker, "Checker", "Node.js", "Checks the story against rules.yaml and the target's ADRs. Never calls Jira")
+  Container(reporter, "Reporter", "Node.js", "Computes L0-L4. The only writer to Jira")
 }
 
-Rel(ba, jira, "Writes stories and CRs", "browser")
-Rel(developer, jira, "Reads the board", "browser")
-Rel(developer, gateway, "GET /v1/stories/{key}/readiness", "HTTP, X-Api-Key")
-Rel(jira, gateway, "POST /webhook", "HTTP")
-Rel(gateway, intake, "Routes /webhook", "HTTP")
-Rel(gateway, reporter, "Routes the readiness API", "HTTP")
-Rel(intake, jira, "Reads the story and its CR", "Jira REST")
-Rel(intake, events, "Writes StoryChanged", "Kafka protocol")
-Rel(checker, events, "Reads StoryChanged, writes StoryChecked", "Kafka protocol")
-Rel(reporter, events, "Reads StoryChecked", "Kafka protocol")
-Rel(reporter, jira, "Writes the level and a comment", "Jira REST")
+Lay_R(ba, jira)
+Lay_R(jira, dev)
+
+Rel_R(ba, jira, "Writes stories")
+Rel_L(dev, jira, "Reads the board")
+BiRel_D(jira, gateway, "Webhook in, level + comment out", "HTTP")
+Rel_D(gateway, intake, "/webhook")
+Rel_U(reporter, gateway, "Level + comment", "REST")
+Rel_R(intake, events, "StoryChanged", "Kafka")
+BiRel_D(events, checker, "StoryChanged in, StoryChecked out", "Kafka")
+Rel_R(events, reporter, "")
+Rel_L(architect, checker, "Maintains rules.yaml")
 
 @enduml
