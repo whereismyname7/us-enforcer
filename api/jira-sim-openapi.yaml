@@ -49,7 +49,7 @@ paths:
               example: { ready: true, service: jira-sim }
 
   # Create a Story or a Change Request.
-  /rest/api/3/issue:
+  /rest/api/v3/issue:
     post:
       operationId: createIssue
       summary: Create an issue. Sends a jira:issue_created webhook.
@@ -88,14 +88,14 @@ paths:
           description: Created
           content:
             application/json:
-              example: { id: "10001", key: NORTH-1, self: "http://jira-sim:3000/rest/api/3/issue/NORTH-1" }
+              example: { id: "10001", key: NORTH-1, self: "http://jira-sim:3000/rest/api/v3/issue/NORTH-1" }
         "400":
           $ref: "#/components/responses/JiraError"
         "409":
           $ref: "#/components/responses/JiraError"
 
   # Read or change one issue.
-  /rest/api/3/issue/{key}:
+  /rest/api/v3/issue/{key}:
     parameters:
       - $ref: "#/components/parameters/Key"
     get:
@@ -148,7 +148,7 @@ paths:
           $ref: "#/components/responses/JiraError"
 
   # Link two issues. "inward Implements outward".
-  /rest/api/3/issueLink:
+  /rest/api/v3/issueLink:
     post:
       operationId: createLink
       summary: Link two issues. A content change for both; one webhook each with changelog issuelinks. A duplicate is ignored.
@@ -190,7 +190,7 @@ paths:
           $ref: "#/components/responses/JiraError"
 
   # Issue properties, for example readiness. No webhook.
-  /rest/api/3/issue/{key}/properties/{prop}:
+  /rest/api/v3/issue/{key}/properties/{prop}:
     parameters:
       - $ref: "#/components/parameters/Key"
       - name: prop
@@ -228,7 +228,7 @@ paths:
           $ref: "#/components/responses/JiraError"
 
   # Comments. Plain text in the simulator; real Jira uses ADF. No webhook.
-  /rest/api/3/issue/{key}/comment:
+  /rest/api/v3/issue/{key}/comment:
     parameters:
       - $ref: "#/components/parameters/Key"
     post:
@@ -259,7 +259,7 @@ paths:
           $ref: "#/components/responses/JiraError"
 
   # The story workflow. Ready for Dev runs the gate.
-  /rest/api/3/issue/{key}/transitions:
+  /rest/api/v3/issue/{key}/transitions:
     parameters:
       - $ref: "#/components/parameters/Key"
     get:
@@ -345,7 +345,7 @@ paths:
           $ref: "#/components/responses/JiraError"
 
   # Search. Only "project = KEY" is supported.
-  /rest/api/3/search:
+  /rest/api/v3/search:
     get:
       operationId: search
       summary: Issues of one project, in key order

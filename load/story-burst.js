@@ -37,7 +37,7 @@ export default function () {
       technicalNotes: "Data owner: Catalog."
     }
   });
-  const res = http.post(JIRA + "/rest/api/3/issue", body, { headers: { "Content-Type": "application/json" } });
+  const res = http.post(JIRA + "/rest/api/v3/issue", body, { headers: { "Content-Type": "application/json" } });
   check(res, { "story created (201)": function (r) { return r.status === 201; } });
 }
 
@@ -45,7 +45,7 @@ export default function () {
 export function teardown() {
   let issues = [];
   for (let i = 0; i < 40; i++) {
-    const res = http.get(JIRA + "/rest/api/3/search?jql=" + encodeURIComponent("project = LOAD") + "&maxResults=1000");
+    const res = http.get(JIRA + "/rest/api/v3/search?jql=" + encodeURIComponent("project = LOAD") + "&maxResults=1000");
     issues = res.json("issues") || [];
     const pending = issues.filter(function (x) { const r = x.properties && x.properties.readiness; return !r || r.state !== "Graded"; });
     if (pending.length === 0) break;

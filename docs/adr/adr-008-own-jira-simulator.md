@@ -25,6 +25,8 @@ What gets worse:
 - Not every Jira behaviour is copied. For example, `fields.updated` changes only on content and links in the simulator,
   while real Jira also changes it for status and labels; the freshness check must be adapted when we move.
 - The simulator is one more component to keep in step with the real API.
+- Our paths use `/rest/api/v3/` where real Jira uses `/rest/api/3/`. Moving to real Jira therefore also means
+  changing the paths in `services/intake/jira-client.js` and `services/reporter/jira-client.js`, not only `JIRA_URL`.
 
 ## Status
 

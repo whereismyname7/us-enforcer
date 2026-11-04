@@ -1,7 +1,7 @@
 {
   "id": "10001",
   "key": "NORTH-1",
-  "self": "http://jira-sim:3000/rest/api/3/issue/NORTH-1",
+  "self": "http://jira-sim:3000/rest/api/v3/issue/NORTH-1",
   "fields": {
     "project": { "key": "NORTH" },
     "issuetype": { "name": "Story" },

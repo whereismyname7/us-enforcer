@@ -44,7 +44,7 @@ test("create with a given key keeps that key", function () {
   const { store } = newStore();
   const result = store.createIssue(storyBody("NORTH-7"), "ba.user");
   assert.equal(result.body.key, "NORTH-7");
-  assert.equal(result.body.self, "http://jira-sim:3000/rest/api/3/issue/NORTH-7");
+  assert.equal(result.body.self, "http://jira-sim:3000/rest/api/v3/issue/NORTH-7");
   assert.equal(store.getIssue("NORTH-7").fields.status.name, "Refinement");
 });
 

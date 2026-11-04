@@ -90,7 +90,7 @@ async function waitFor(fn, what, timeoutMs) {
 // Wait until a story is graded for the version saved right now, then return the issue.
 async function waitForGrade(key) {
   return waitFor(async function () {
-    const res = await jira("GET", "/rest/api/3/issue/" + key);
+    const res = await jira("GET", "/rest/api/v3/issue/" + key);
     const r = res.body && res.body.properties ? res.body.properties.readiness : null;
     if (r && r.state === "Graded" && r.story_updated_at === res.body.fields.updated) {
       return res.body;
@@ -101,7 +101,7 @@ async function waitForGrade(key) {
 
 // Read one issue.
 async function getIssue(key) {
-  return (await jira("GET", "/rest/api/3/issue/" + key)).body;
+  return (await jira("GET", "/rest/api/v3/issue/" + key)).body;
 }
 
 // The comments on an issue written by our bot.
@@ -144,15 +144,15 @@ const steps = [
   }],
 
   ["S1", "CR created", async function () {
-    const res = await jira("POST", "/rest/api/3/issue", sample("crs/CR-12.json"));
+    const res = await jira("POST", "/rest/api/v3/issue", sample("crs/CR-12.json"));
     check(res.status === 201, "201", res.status);
     check(res.body.key === "CR-12", "key CR-12", res.body.key);
   }],
 
   ["S2", "weak story graded L1", async function () {
-    const created = await jira("POST", "/rest/api/3/issue", sample("stories/reserve-stock-v1.json"));
+    const created = await jira("POST", "/rest/api/v3/issue", sample("stories/reserve-stock-v1.json"));
     check(created.status === 201, "201 on create", created.status);
-    const linked = await jira("POST", "/rest/api/3/issueLink", sample("link-NORTH-1-CR-12.json"));
+    const linked = await jira("POST", "/rest/api/v3/issueLink", sample("link-NORTH-1-CR-12.json"));
     check(linked.status === 201, "201 on link", linked.status);
     const issue = await waitForGrade("NORTH-1");
     const r = issue.properties.readiness;
@@ -171,7 +171,7 @@ const steps = [
   }],
 
   ["S3", "gate blocks below L4", async function () {
-    const res = await jira("POST", "/rest/api/3/issue/NORTH-1/transitions", sample("transition-ready.json"));
+    const res = await jira("POST", "/rest/api/v3/issue/NORTH-1/transitions", sample("transition-ready.json"));
     check(res.status === 400, "400", res.status);
     check(res.body.errorMessages[0].indexOf("not ready for development") !== -1, "\"not ready for development\"", res.body.errorMessages[0]);
     check(res.body.errors.readiness === "L1", "errors.readiness L1", res.body.errors.readiness);
@@ -189,9 +189,9 @@ const steps = [
   }],
 
   ["S5", "fixed story graded L4", async function () {
-    const crPut = await jira("PUT", "/rest/api/3/issue/CR-12", sample("crs/CR-12-update.json"));
+    const crPut = await jira("PUT", "/rest/api/v3/issue/CR-12", sample("crs/CR-12-update.json"));
     check(crPut.status === 204, "204 on the CR edit", crPut.status);
-    const storyPut = await jira("PUT", "/rest/api/3/issue/NORTH-1", sample("stories/reserve-stock-v2.json"));
+    const storyPut = await jira("PUT", "/rest/api/v3/issue/NORTH-1", sample("stories/reserve-stock-v2.json"));
     check(storyPut.status === 204, "204 on the story edit", storyPut.status);
     const straight = await getIssue("NORTH-1");
     check(straight.properties.readiness.state === "Pending", "Pending straight after the edit", straight.properties.readiness.state);
@@ -209,14 +209,14 @@ const steps = [
   }],
 
   ["S6", "gate passes at L4", async function () {
-    const res = await jira("POST", "/rest/api/3/issue/NORTH-1/transitions", sample("transition-ready.json"));
+    const res = await jira("POST", "/rest/api/v3/issue/NORTH-1/transitions", sample("transition-ready.json"));
     check(res.status === 204, "204", res.status);
     const board = await jira("GET", "/board");
     check(board.body.issues.some(function (i) { return i.key === "NORTH-1"; }), "NORTH-1 on the board", board.body.issues);
   }],
 
   ["S7", "scope creep moves it back", async function () {
-    const put = await jira("PUT", "/rest/api/3/issue/NORTH-1", sample("stories/reserve-stock-v3.json"));
+    const put = await jira("PUT", "/rest/api/v3/issue/NORTH-1", sample("stories/reserve-stock-v3.json"));
     check(put.status === 204, "204 on the edit", put.status);
     const issue = await waitForGrade("NORTH-1");
     const r = issue.properties.readiness;
@@ -237,7 +237,7 @@ const steps = [
   }],
 
   ["S8", "override lets it through with a trace", async function () {
-    const res = await jira("POST", "/rest/api/3/issue/NORTH-1/transitions", sample("transition-override.json"));
+    const res = await jira("POST", "/rest/api/v3/issue/NORTH-1/transitions", sample("transition-override.json"));
     check(res.status === 204, "204", res.status);
     const issue = await getIssue("NORTH-1");
     check(issue.fields.status.name === "Ready for Dev", "status Ready for Dev", issue.fields.status.name);
@@ -248,7 +248,7 @@ const steps = [
   }],
 
   ["S9", "story without a CR graded L2", async function () {
-    const created = await jira("POST", "/rest/api/3/issue", sample("stories/gift-wrap.json"));
+    const created = await jira("POST", "/rest/api/v3/issue", sample("stories/gift-wrap.json"));
     check(created.status === 201, "201", created.status);
     const issue = await waitForGrade("NORTH-2");
     const r = issue.properties.readiness;

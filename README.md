@@ -226,15 +226,15 @@ The [example](#example-one-story-end-to-end) above, run against the simulator.
 
 ```bash
 curl -X POST http://localhost:9000/admin/reset
-curl -X POST http://localhost:9000/rest/api/3/issue -H "Content-Type: application/json" --data-binary "@samples/crs/CR-12.json"
-curl -X POST http://localhost:9000/rest/api/3/issue -H "Content-Type: application/json" --data-binary "@samples/stories/reserve-stock-v1.json"
-curl -X POST http://localhost:9000/rest/api/3/issueLink -H "Content-Type: application/json" --data-binary "@samples/link-NORTH-1-CR-12.json"
+curl -X POST http://localhost:9000/rest/api/v3/issue -H "Content-Type: application/json" --data-binary "@samples/crs/CR-12.json"
+curl -X POST http://localhost:9000/rest/api/v3/issue -H "Content-Type: application/json" --data-binary "@samples/stories/reserve-stock-v1.json"
+curl -X POST http://localhost:9000/rest/api/v3/issueLink -H "Content-Type: application/json" --data-binary "@samples/link-NORTH-1-CR-12.json"
 ```
 
 **Read the grade** (a few seconds later)
 
 ```bash
-curl http://localhost:9000/rest/api/3/issue/NORTH-1
+curl http://localhost:9000/rest/api/v3/issue/NORTH-1
 curl -H "X-Api-Key: dev-only-api-key" http://localhost:9001/v1/stories/NORTH-1/readiness
 ```
 
@@ -243,7 +243,7 @@ curl -H "X-Api-Key: dev-only-api-key" http://localhost:9001/v1/stories/NORTH-1/r
 **The gate blocks it**
 
 ```bash
-curl -i -X POST http://localhost:9000/rest/api/3/issue/NORTH-1/transitions -H "Content-Type: application/json" --data-binary "@samples/transition-ready.json"
+curl -i -X POST http://localhost:9000/rest/api/v3/issue/NORTH-1/transitions -H "Content-Type: application/json" --data-binary "@samples/transition-ready.json"
 ```
 
 → `400` and `This story is not ready for development.`
@@ -251,9 +251,9 @@ curl -i -X POST http://localhost:9000/rest/api/3/issue/NORTH-1/transitions -H "C
 **Fix the CR and the story**
 
 ```bash
-curl -X PUT http://localhost:9000/rest/api/3/issue/CR-12 -H "Content-Type: application/json" --data-binary "@samples/crs/CR-12-update.json"
-curl -X PUT http://localhost:9000/rest/api/3/issue/NORTH-1 -H "Content-Type: application/json" --data-binary "@samples/stories/reserve-stock-v2.json"
-curl http://localhost:9000/rest/api/3/issue/NORTH-1
+curl -X PUT http://localhost:9000/rest/api/v3/issue/CR-12 -H "Content-Type: application/json" --data-binary "@samples/crs/CR-12-update.json"
+curl -X PUT http://localhost:9000/rest/api/v3/issue/NORTH-1 -H "Content-Type: application/json" --data-binary "@samples/stories/reserve-stock-v2.json"
+curl http://localhost:9000/rest/api/v3/issue/NORTH-1
 ```
 
 → `"state":"Pending"` straight after the edit, then `"level":4` with one warning, `Needs security review: payment`.
@@ -261,7 +261,7 @@ curl http://localhost:9000/rest/api/3/issue/NORTH-1
 **The gate opens and developers see it**
 
 ```bash
-curl -i -X POST http://localhost:9000/rest/api/3/issue/NORTH-1/transitions -H "Content-Type: application/json" --data-binary "@samples/transition-ready.json"
+curl -i -X POST http://localhost:9000/rest/api/v3/issue/NORTH-1/transitions -H "Content-Type: application/json" --data-binary "@samples/transition-ready.json"
 curl http://localhost:9000/board
 ```
 
@@ -270,8 +270,8 @@ curl http://localhost:9000/board
 **Scope creep moves it back**
 
 ```bash
-curl -X PUT http://localhost:9000/rest/api/3/issue/NORTH-1 -H "Content-Type: application/json" --data-binary "@samples/stories/reserve-stock-v3.json"
-curl http://localhost:9000/rest/api/3/issue/NORTH-1
+curl -X PUT http://localhost:9000/rest/api/v3/issue/NORTH-1 -H "Content-Type: application/json" --data-binary "@samples/stories/reserve-stock-v3.json"
+curl http://localhost:9000/rest/api/v3/issue/NORTH-1
 ```
 
 → `"level":3`, `"discount" is out of scope for CR-12`, status back to `Refinement`, and an empty board.
@@ -284,9 +284,9 @@ curl http://localhost:9000/rest/api/3/issue/NORTH-1
 
 ```bash
 docker compose stop impact
-curl -X POST http://localhost:9000/rest/api/3/issue -H "Content-Type: application/json" --data-binary "@samples/stories/gift-wrap.json"
+curl -X POST http://localhost:9000/rest/api/v3/issue -H "Content-Type: application/json" --data-binary "@samples/stories/gift-wrap.json"
 docker compose start impact
-curl http://localhost:9000/rest/api/3/issue/NORTH-2
+curl http://localhost:9000/rest/api/v3/issue/NORTH-2
 ```
 
 → Pending while Impact is down, then `"level":2` (no CR linked) after it restarts.

@@ -200,7 +200,7 @@ function createStore(options) {
     return out;
   }
 
-  // The full issue, exactly as GET /rest/api/3/issue/{key} returns it.
+  // The full issue, exactly as GET /rest/api/v3/issue/{key} returns it.
   function view(issue) {
     // The fields every issue has, in the order Jira lists them.
     const fields = {
@@ -228,7 +228,7 @@ function createStore(options) {
     return JSON.parse(JSON.stringify({
       id: issue.id,
       key: issue.key,
-      self: baseUrl + "/rest/api/3/issue/" + issue.key,
+      self: baseUrl + "/rest/api/v3/issue/" + issue.key,
       fields: fields,
       properties: issue.properties
     }));
@@ -245,7 +245,7 @@ function createStore(options) {
     };
   }
 
-  // POST /rest/api/3/issue
+  // POST /rest/api/v3/issue
   function createIssue(body, actor) {
     // The body must have a fields object.
     const fields = body && typeof body.fields === "object" && body.fields ? body.fields : null;
@@ -334,18 +334,18 @@ function createStore(options) {
 
     // Answer like Jira, and send one created webhook.
     return {
-      body: { id: issue.id, key: key, self: baseUrl + "/rest/api/3/issue/" + key },
+      body: { id: issue.id, key: key, self: baseUrl + "/rest/api/v3/issue/" + key },
       webhooks: [webhook("jira:issue_created", issue, actor, [])]
     };
   }
 
-  // GET /rest/api/3/issue/{key}. Returns null when the issue does not exist.
+  // GET /rest/api/v3/issue/{key}. Returns null when the issue does not exist.
   function getIssue(key) {
     const issue = issues.get(key);
     return issue ? view(issue) : null;
   }
 
-  // PUT /rest/api/3/issue/{key}: merge the given fields into the issue.
+  // PUT /rest/api/v3/issue/{key}: merge the given fields into the issue.
   function updateIssue(key, body, actor) {
     const issue = mustGet(key);
     // The body must have a fields object.
@@ -403,7 +403,7 @@ function createStore(options) {
     return { webhooks: [webhook("jira:issue_updated", issue, actor, items)] };
   }
 
-  // POST /rest/api/3/issueLink: "inward <type> outward".
+  // POST /rest/api/v3/issueLink: "inward <type> outward".
   function createLink(body, actor) {
     // Read the three parts of the link.
     const typeName = body && body.type && body.type.name ? String(body.type.name) : "";
@@ -516,7 +516,7 @@ function createStore(options) {
     return { via: via, webhooks: [webhook("jira:issue_updated", issue, actor, [{ field: "status", fromString: from, toString: found.name }])] };
   }
 
-  // GET /rest/api/3/search?jql=project = KEY&maxResults=N
+  // GET /rest/api/v3/search?jql=project = KEY&maxResults=N
   function search(jql, maxResults) {
     const project = parseJql(jql);
     if (!project) {

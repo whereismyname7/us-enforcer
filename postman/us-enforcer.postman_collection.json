@@ -225,14 +225,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue",
+              "raw": "{{jira}}/rest/api/v3/issue",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue"
               ]
             },
@@ -269,14 +269,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue",
+              "raw": "{{jira}}/rest/api/v3/issue",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue"
               ]
             },
@@ -313,14 +313,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issueLink",
+              "raw": "{{jira}}/rest/api/v3/issueLink",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issueLink"
               ]
             },
@@ -352,14 +352,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1"
               ]
@@ -437,14 +437,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1/transitions",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1",
                 "transitions"
@@ -484,14 +484,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/CR-12",
+              "raw": "{{jira}}/rest/api/v3/issue/CR-12",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "CR-12"
               ]
@@ -529,14 +529,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1"
               ]
@@ -569,14 +569,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1"
               ]
@@ -618,14 +618,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1/transitions",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1",
                 "transitions"
@@ -692,14 +692,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1"
               ]
@@ -732,14 +732,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1"
               ]
@@ -781,14 +781,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1/transitions",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1",
                 "transitions"
@@ -1353,14 +1353,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1/transitions",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/transitions",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1",
                 "transitions"
@@ -1385,14 +1385,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1/properties/readiness",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/properties/readiness",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1",
                 "properties",
@@ -1418,14 +1418,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{jira}}/rest/api/3/search?jql=project%20%3D%20NORTH&maxResults=50",
+              "raw": "{{jira}}/rest/api/v3/search?jql=project%20%3D%20NORTH&maxResults=50",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "search"
               ],
               "query": [
@@ -1467,14 +1467,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue/NORTH-1/comment",
+              "raw": "{{jira}}/rest/api/v3/issue/NORTH-1/comment",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue",
                 "NORTH-1",
                 "comment"
@@ -1513,14 +1513,14 @@
               }
             ],
             "url": {
-              "raw": "{{jira}}/rest/api/3/issue",
+              "raw": "{{jira}}/rest/api/v3/issue",
               "host": [
                 "{{jira}}"
               ],
               "path": [
                 "rest",
                 "api",
-                "3",
+                "v3",
                 "issue"
               ]
             },

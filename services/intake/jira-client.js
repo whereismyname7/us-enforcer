@@ -34,7 +34,7 @@ function createJiraClient(options) {
 
   // Read one issue. Returns null if it does not exist.
   async function getIssue(key) {
-    const result = await call("GET", "/rest/api/3/issue/" + encodeURIComponent(key));
+    const result = await call("GET", "/rest/api/v3/issue/" + encodeURIComponent(key));
     if (result.status === 404) {
       return null;
     }
@@ -46,7 +46,7 @@ function createJiraClient(options) {
 
   // Link a story to a CR as the bot: "story Implements CR".
   async function linkImplements(storyKey, crKey) {
-    const result = await call("POST", "/rest/api/3/issueLink", {
+    const result = await call("POST", "/rest/api/v3/issueLink", {
       type: { name: "Implements" },
       inwardIssue: { key: storyKey },
       outwardIssue: { key: crKey }

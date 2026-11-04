@@ -134,7 +134,7 @@ app.get("/ready", function (req, res) {
 });
 
 // Create an issue: a Story or a Change Request.
-app.post("/rest/api/3/issue", handle(function (req, res) {
+app.post("/rest/api/v3/issue", handle(function (req, res) {
   const result = store.createIssue(req.body, req.actor);
   log({ level: "info", event: "issue_created", key: result.body.key, actor: req.actor });
   res.status(201).json(result.body);
@@ -142,7 +142,7 @@ app.post("/rest/api/3/issue", handle(function (req, res) {
 }));
 
 // Read one issue.
-app.get("/rest/api/3/issue/:key", handle(function (req, res) {
+app.get("/rest/api/v3/issue/:key", handle(function (req, res) {
   const issue = store.getIssue(req.params.key);
   if (!issue) {
     res.status(404).json({ errorMessages: ["Issue does not exist or you do not have permission to see it."], errors: {} });
@@ -152,7 +152,7 @@ app.get("/rest/api/3/issue/:key", handle(function (req, res) {
 }));
 
 // Change an issue's fields.
-app.put("/rest/api/3/issue/:key", handle(function (req, res) {
+app.put("/rest/api/v3/issue/:key", handle(function (req, res) {
   const result = store.updateIssue(req.params.key, req.body, req.actor);
   // Log which fields changed, but never the story text itself.
   if (result.webhooks.length > 0) {
@@ -164,7 +164,7 @@ app.put("/rest/api/3/issue/:key", handle(function (req, res) {
 }));
 
 // Link two issues: "inward Implements outward" or "inward Blocks outward".
-app.post("/rest/api/3/issueLink", handle(function (req, res) {
+app.post("/rest/api/v3/issueLink", handle(function (req, res) {
   const result = store.createLink(req.body, req.actor);
   log({ level: "info", event: result.webhooks.length > 0 ? "link_created" : "link_duplicate_ignored", type: req.body.type.name, inward: req.body.inwardIssue.key, outward: req.body.outwardIssue.key, actor: req.actor });
   res.status(201).end();
@@ -172,30 +172,30 @@ app.post("/rest/api/3/issueLink", handle(function (req, res) {
 }));
 
 // Read one issue property, for example "readiness".
-app.get("/rest/api/3/issue/:key/properties/:prop", handle(function (req, res) {
+app.get("/rest/api/v3/issue/:key/properties/:prop", handle(function (req, res) {
   const value = store.getProperty(req.params.key, req.params.prop);
   res.json({ key: req.params.prop, value: value });
 }));
 
 // Write one issue property. No webhook.
-app.put("/rest/api/3/issue/:key/properties/:prop", handle(function (req, res) {
+app.put("/rest/api/v3/issue/:key/properties/:prop", handle(function (req, res) {
   store.setProperty(req.params.key, req.params.prop, req.body);
   res.status(200).json({ key: req.params.prop, value: req.body });
 }));
 
 // Add a plain-text comment. No webhook.
-app.post("/rest/api/3/issue/:key/comment", handle(function (req, res) {
+app.post("/rest/api/v3/issue/:key/comment", handle(function (req, res) {
   const result = store.addComment(req.params.key, req.body ? req.body.body : undefined, req.actor);
   res.status(201).json(result);
 }));
 
 // List the transitions allowed from the story's status.
-app.get("/rest/api/3/issue/:key/transitions", handle(function (req, res) {
+app.get("/rest/api/v3/issue/:key/transitions", handle(function (req, res) {
   res.json({ transitions: store.listTransitions(req.params.key) });
 }));
 
 // Move a story. Ready for Dev runs the gate.
-app.post("/rest/api/3/issue/:key/transitions", handle(function (req, res) {
+app.post("/rest/api/v3/issue/:key/transitions", handle(function (req, res) {
   try {
     const result = store.transition(req.params.key, req.body || {}, req.actor);
     const issue = store.getIssue(req.params.key);
@@ -212,7 +212,7 @@ app.post("/rest/api/3/issue/:key/transitions", handle(function (req, res) {
 }));
 
 // Search. Only "project = KEY" is supported.
-app.get("/rest/api/3/search", handle(function (req, res) {
+app.get("/rest/api/v3/search", handle(function (req, res) {
   res.json(store.search(req.query.jql, req.query.maxResults));
 }));
 

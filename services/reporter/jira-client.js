@@ -56,7 +56,7 @@ function createJiraClient(options) {
   // Step 3 of grading: write one grade back to the story.
   // Returns { outcome: "written" | "superseded" | "missing", moved_back }.
   async function writeGrade(grade, storyKey) {
-    const path = "/rest/api/3/issue/" + encodeURIComponent(storyKey);
+    const path = "/rest/api/v3/issue/" + encodeURIComponent(storyKey);
 
     // 1. Read the story. If it changed since it was checked, a newer check is already on its way.
     const read = await call("GET", path);
