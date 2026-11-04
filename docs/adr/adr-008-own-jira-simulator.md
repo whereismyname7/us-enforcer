@@ -27,6 +27,10 @@ What gets worse:
 - The simulator is one more component to keep in step with the real API.
 - Our paths use `/rest/api/v3/` where real Jira uses `/rest/api/3/`. Moving to real Jira therefore also means
   changing the paths in `services/intake/jira-client.js` and `services/reporter/jira-client.js`, not only `JIRA_URL`.
+- For a clear demo, the simulator returns a short card (level and status first, missing items as one line each,
+  newest comment first), moves a story with `{"to": "Ready for Dev"}` instead of transition ids, and takes the
+  Reporter's grade, comment and labels in one call. Real Jira does none of this, so Intake's `translate.js` and the
+  Reporter's `jira-client.js` must be adapted when we move.
 
 ## Status
 

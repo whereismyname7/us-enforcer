@@ -1,4 +1,4 @@
-// The simulator's memory: issues, keys, links, comments, properties and timestamps.
+// The simulator's memory: issues, keys, links, comments, readiness and timestamps.
 // Nothing here talks to the network. Each change returns the webhooks to send,
 // and server.js sends them after it has answered the caller.
 // Everything is lost when the container restarts, on purpose (ADR-008).
@@ -18,20 +18,15 @@ const ARRAY_FIELDS = ["impactedSystems", "inScope", "outOfScope", "labels"];
 // Fields that hold a date such as 2026-12-15, or null.
 const DATE_FIELDS = ["dueDate", "targetDate"];
 
-// The two link types, with the words Jira shows on each side.
-// "NORTH-1 Implements CR-12" means NORTH-1 is the inward issue and CR-12 the outward one.
-const LINK_TYPES = {
-  Implements: { name: "Implements", inward: "implements", outward: "is implemented by" },
-  Blocks: { name: "Blocks", inward: "blocks", outward: "is blocked by" }
+// The two link types. "NORTH-1 Implements CR-12" means NORTH-1 is the inward issue and CR-12 the outward one.
+// The card shows each link from its own side: "implements" on the story, "is_implemented_by" on the CR.
+const LINK_RELATIONS = {
+  Implements: { inward: "implements", outward: "is_implemented_by" },
+  Blocks: { inward: "blocks", outward: "is_blocked_by" }
 };
 
-// The story workflow. "from" null means the transition is allowed from any status.
-const TRANSITIONS = [
-  { id: "11", name: "Refinement", from: null },
-  { id: "21", name: "Ready for Dev", from: null },
-  { id: "31", name: "In Progress", from: "Ready for Dev" },
-  { id: "41", name: "Done", from: "In Progress" }
-];
+// The only two statuses a story can be moved to. Everything else is out of scope.
+const STATUSES = ["Refinement", "Ready for Dev"];
 
 // The message Jira gives when an issue key is unknown.
 const NOT_FOUND_MESSAGE = "Issue does not exist or you do not have permission to see it.";
@@ -50,7 +45,6 @@ class SimError extends Error {
 
 // Turn "NORTH-12" into the parts we sort by: the project and the number.
 function keyParts(key) {
-  // Split at the last dash.
   const dash = key.lastIndexOf("-");
   return { project: key.slice(0, dash), number: Number(key.slice(dash + 1)) };
 }
@@ -59,35 +53,25 @@ function keyParts(key) {
 function compareKeys(a, b) {
   const pa = keyParts(a);
   const pb = keyParts(b);
-  // Different projects sort by name.
   if (pa.project !== pb.project) {
     return pa.project < pb.project ? -1 : 1;
   }
-  // Same project sorts by number.
   return pa.number - pb.number;
 }
 
 // Read "project = LOAD" (spaces and quotes optional). Returns "LOAD", or null if the JQL is anything else.
 function parseJql(jql) {
-  // One project, with an optional matching pair of quotes around it.
   const match = /^\s*project\s*=\s*(["']?)([A-Za-z][A-Za-z0-9]*)\1\s*$/i.exec(String(jql || ""));
-  // Anything else is not supported by the simulator.
-  if (!match) {
-    return null;
-  }
-  // Project keys are upper case in Jira.
-  return match[2].toUpperCase();
+  return match ? match[2].toUpperCase() : null;
 }
 
 // Clean one incoming field value into the type the simulator stores.
 function cleanValue(name, value) {
   // Lists must be lists of text.
   if (ARRAY_FIELDS.indexOf(name) !== -1) {
-    // A missing list becomes empty.
     if (value === undefined || value === null) {
       return [];
     }
-    // Anything that is not a list is refused.
     if (!Array.isArray(value)) {
       throw new SimError(400, [], { [name]: "Must be a list of strings" });
     }
@@ -104,36 +88,25 @@ function cleanValue(name, value) {
 // Build a new, empty store. Options:
 //   botAccount    the account id of our own service account
 //   overrideRoles the roles allowed to override the gate
-//   baseUrl       used in each issue's "self" link
 //   now           a clock function, so tests can control time (default Date.now)
 function createStore(options) {
   // Our own bot. Its edits never reset readiness.
   const botAccount = options.botAccount;
   // The roles allowed to override the gate.
   const overrideRoles = options.overrideRoles;
-  // The start of every "self" link.
-  const baseUrl = options.baseUrl;
   // The clock. Tests pass their own to make two changes land in the same millisecond.
   const clock = options.now || Date.now;
 
-  // Every issue by key.
+  // Every issue by key, every link as { type, inward, outward }, and the highest number used per project.
   let issues;
-  // Every link, as { type, inward, outward }.
   let links;
-  // The next numeric id, for example 10001.
-  let nextId;
-  // The highest number used so far in each project.
   let lastNumber;
-  // The next comment id.
-  let nextCommentId;
 
   // Delete every issue and start all counters again.
   function reset() {
     issues = new Map();
     links = [];
-    nextId = 10001;
     lastNumber = {};
-    nextCommentId = 1;
   }
 
   // Start empty.
@@ -153,6 +126,15 @@ function createStore(options) {
     return issue;
   }
 
+  // Find a story or answer 400.
+  function mustGetStory(key) {
+    const issue = mustGet(key);
+    if (issue.issuetype !== "Story") {
+      throw new SimError(400, ["Only stories have readiness and a workflow"], {});
+    }
+    return issue;
+  }
+
   // A content or link change: move "updated" forward.
   // If two changes land in the same millisecond, add 1 ms so "updated" always increases.
   function touch(issue) {
@@ -167,70 +149,84 @@ function createStore(options) {
   // A human changed a story's content or links: readiness goes back to Pending,
   // and any override is removed, because it was given for an older version.
   function resetReadiness(issue, actor) {
-    // Only stories are graded.
-    if (issue.issuetype !== "Story") {
+    // Only stories are graded, and the bot's own edits reset nothing. This stops an update loop.
+    if (issue.issuetype !== "Story" || actor === botAccount) {
       return;
     }
-    // The bot's own edits do not reset anything. This stops an update loop.
-    if (actor === botAccount) {
-      return;
-    }
-    issue.properties.readiness = { state: "Pending", story_updated_at: issue.updated };
-    delete issue.properties.override;
+    issue.readiness = { state: "Pending", story_updated_at: issue.updated };
+    issue.override = null;
   }
 
-  // The small part of the other issue that a link shows.
-  function linkedIssueView(key) {
-    const other = issues.get(key);
-    return { key: key, fields: { issuetype: { name: other.issuetype }, status: { name: other.status } } };
-  }
-
-  // The links of one issue, in the shape Jira returns them.
+  // The links of one issue, each seen from this issue's side.
   function linksOf(key) {
     const out = [];
     for (const link of links) {
-      // This issue is the inward one, so it shows the other side as outwardIssue.
-      if (link.inward === key) {
-        out.push({ type: LINK_TYPES[link.type], outwardIssue: linkedIssueView(link.outward) });
-      } else if (link.outward === key) {
-        // This issue is the outward one, so it shows the other side as inwardIssue.
-        out.push({ type: LINK_TYPES[link.type], inwardIssue: linkedIssueView(link.inward) });
+      const names = LINK_RELATIONS[link.type];
+      // This issue is the inward one ("NORTH-1 implements CR-12"), or the outward one.
+      const otherKey = link.inward === key ? link.outward : link.outward === key ? link.inward : null;
+      if (!otherKey) {
+        continue;
       }
+      const other = issues.get(otherKey);
+      out.push({ relation: link.inward === key ? names.inward : names.outward, key: otherKey, type: other.issuetype, status: other.status });
     }
     return out;
   }
 
-  // The full issue, exactly as GET /rest/api/v3/issue/{key} returns it.
-  function view(issue) {
-    // The fields every issue has, in the order Jira lists them.
-    const fields = {
-      project: { key: issue.project },
-      issuetype: { name: issue.issuetype },
-      summary: issue.content.summary,
-      status: { name: issue.status }
-    };
-    // Story fields or Change Request fields.
-    const names = issue.issuetype === "Story" ? STORY_CONTENT_FIELDS : CR_CONTENT_FIELDS;
-    for (const name of names) {
-      // Summary and status are already in place.
-      if (name === "summary" || name === "status") {
-        continue;
-      }
-      fields[name] = issue.content[name];
+  // Add a plain-text comment. Only the simulator itself calls this (overrides and grades).
+  function addComment(issue, text, actor) {
+    issue.comments.push({ author: actor, body: text, created: nowIso() });
+  }
+
+  // The card: the short view of an issue that GET returns. The level and status come first.
+  // "level" is "L0" to "L4" for a grade of the version saved right now, otherwise "Pending".
+  function card(issue) {
+    // Links, newest comment first.
+    const linkList = linksOf(issue.key);
+    const comments = issue.comments.slice().reverse();
+    // A Change Request has no level.
+    if (issue.issuetype !== "Story") {
+      return JSON.parse(JSON.stringify({
+        key: issue.key,
+        type: issue.issuetype,
+        status: issue.status,
+        summary: issue.content.summary,
+        impactedSystems: issue.content.impactedSystems,
+        inScope: issue.content.inScope,
+        outOfScope: issue.content.outOfScope,
+        targetDate: issue.content.targetDate,
+        links: linkList,
+        labels: issue.labels,
+        updated: issue.updated
+      }));
     }
-    // Labels, links, comments and the two timestamps.
-    fields.labels = issue.labels.slice();
-    fields.issuelinks = linksOf(issue.key);
-    fields.comment = { comments: issue.comments.slice() };
-    fields.created = issue.created;
-    fields.updated = issue.updated;
-    // A deep copy, so a caller can never change our memory by accident.
+    // A grade counts only if it is for the version saved right now.
+    const r = issue.readiness;
+    const fresh = !!r && r.state === "Graded" && r.story_updated_at === issue.updated;
+    // Each failed check as one short line: "R-AC-01: 1 criteria are not Given/When/Then".
+    function lines(list) {
+      return fresh ? (list || []).map(function (c) { return c.id + ": " + c.message; }) : [];
+    }
     return JSON.parse(JSON.stringify({
-      id: issue.id,
       key: issue.key,
-      self: baseUrl + "/rest/api/v3/issue/" + issue.key,
-      fields: fields,
-      properties: issue.properties
+      type: issue.issuetype,
+      level: fresh ? "L" + r.level : "Pending",
+      status: issue.status,
+      summary: issue.content.summary,
+      missing: lines(r && r.failed),
+      warnings: lines(r && r.warnings),
+      asA: issue.content.asA,
+      iWant: issue.content.iWant,
+      soThat: issue.content.soThat,
+      acceptanceCriteria: issue.content.acceptanceCriteria,
+      technicalNotes: issue.content.technicalNotes,
+      dueDate: issue.content.dueDate,
+      links: linkList,
+      labels: issue.labels,
+      override: issue.override,
+      comments: comments,
+      updated: issue.updated,
+      checkedAt: fresh ? r.checked_at : null
     }));
   }
 
@@ -299,50 +295,40 @@ function createStore(options) {
     // Remember the highest number, so auto-numbering never reuses one.
     lastNumber[project] = Math.max(lastNumber[project] || 0, number);
 
-    // Build the stored issue.
+    // Build the stored issue. Stories start in Refinement; a CR takes its status from the body, default Draft.
     const issue = {
-      id: String(nextId),
       key: key,
       project: project,
       issuetype: issuetype,
-      // Stories start in Refinement; a CR takes its status from the body, default Draft.
       status: issuetype === "Story" ? "Refinement" : (fields.status ? String(fields.status) : "Draft"),
       content: {},
       labels: cleanValue("labels", fields.labels),
       comments: [],
-      properties: {}
+      readiness: null,
+      override: null
     };
-    nextId = nextId + 1;
-    // Copy the content fields, with defaults for anything missing.
+    // Copy the content fields, with defaults for anything missing. A CR's status is kept on its own.
     const names = issuetype === "Story" ? STORY_CONTENT_FIELDS : CR_CONTENT_FIELDS;
     for (const name of names) {
-      // A CR's status is kept on its own.
-      if (name === "status") {
-        continue;
+      if (name !== "status") {
+        issue.content[name] = cleanValue(name, fields[name]);
       }
-      issue.content[name] = cleanValue(name, fields[name]);
     }
-    // Set both timestamps to now.
+    // Set "updated" to now. Every new story starts Pending, whoever created it.
     touch(issue);
-    issue.created = issue.updated;
-    // Every new story starts Pending, whoever created it.
     if (issuetype === "Story") {
-      issue.properties.readiness = { state: "Pending", story_updated_at: issue.updated };
+      issue.readiness = { state: "Pending", story_updated_at: issue.updated };
     }
-    // Save it.
     issues.set(key, issue);
 
-    // Answer like Jira, and send one created webhook.
-    return {
-      body: { id: issue.id, key: key, self: baseUrl + "/rest/api/v3/issue/" + key },
-      webhooks: [webhook("jira:issue_created", issue, actor, [])]
-    };
+    // Answer with the new key, and send one created webhook.
+    return { body: { key: key }, webhooks: [webhook("jira:issue_created", issue, actor, [])] };
   }
 
-  // GET /rest/api/v3/issue/{key}. Returns null when the issue does not exist.
+  // GET /rest/api/v3/issue/{key}. Returns the card, or null when the issue does not exist.
   function getIssue(key) {
     const issue = issues.get(key);
-    return issue ? view(issue) : null;
+    return issue ? card(issue) : null;
   }
 
   // PUT /rest/api/v3/issue/{key}: merge the given fields into the issue.
@@ -357,17 +343,15 @@ function createStore(options) {
     const contentNames = issue.issuetype === "Story" ? STORY_CONTENT_FIELDS : CR_CONTENT_FIELDS;
     // The changelog: one item per field whose value really changed.
     const items = [];
-    // Did any content field change?
     let contentChanged = false;
 
-    // Look at every content field the caller sent.
     for (const name of contentNames) {
       if (!(name in fields)) {
         continue;
       }
       // A CR's status is stored on its own and logged with from and to.
       if (name === "status") {
-        const next = String(fields.status && fields.status.name ? fields.status.name : fields.status);
+        const next = String(fields.status);
         if (next !== issue.status) {
           items.push({ field: "status", fromString: issue.status, toString: next });
           issue.status = next;
@@ -397,37 +381,26 @@ function createStore(options) {
       resetReadiness(issue, actor);
     }
     // Nothing changed: no webhook.
-    if (items.length === 0) {
-      return { webhooks: [] };
-    }
-    return { webhooks: [webhook("jira:issue_updated", issue, actor, items)] };
+    return { webhooks: items.length === 0 ? [] : [webhook("jira:issue_updated", issue, actor, items)] };
   }
 
-  // POST /rest/api/v3/issueLink: "inward <type> outward".
+  // POST /rest/api/v3/issueLink: "inward <type> outward". Used by Intake's auto-link and the smoke test.
   function createLink(body, actor) {
-    // Read the three parts of the link.
     const typeName = body && body.type && body.type.name ? String(body.type.name) : "";
     const inwardKey = body && body.inwardIssue && body.inwardIssue.key ? String(body.inwardIssue.key) : "";
     const outwardKey = body && body.outwardIssue && body.outwardIssue.key ? String(body.outwardIssue.key) : "";
-    // Only the two known link types.
-    if (!LINK_TYPES[typeName]) {
+    if (!LINK_RELATIONS[typeName]) {
       throw new SimError(400, ["Link type must be Implements or Blocks"], {});
     }
-    // Both sides are needed.
     if (!inwardKey || !outwardKey) {
       throw new SimError(400, ["Send inwardIssue.key and outwardIssue.key"], {});
     }
-    // Both issues must exist.
     const inward = mustGet(inwardKey);
     const outward = mustGet(outwardKey);
     // A duplicate link is ignored, but the caller still gets 201.
-    const duplicate = links.some(function (l) {
-      return l.type === typeName && l.inward === inwardKey && l.outward === outwardKey;
-    });
-    if (duplicate) {
+    if (links.some(function (l) { return l.type === typeName && l.inward === inwardKey && l.outward === outwardKey; })) {
       return { webhooks: [] };
     }
-    // Save the link.
     links.push({ type: typeName, inward: inwardKey, outward: outwardKey });
     // A link is a content change for both issues.
     const webhooks = [];
@@ -439,84 +412,69 @@ function createStore(options) {
     return { webhooks: webhooks };
   }
 
-  // GET .../properties/{prop}. Returns the value, or throws 404.
-  function getProperty(key, prop) {
-    const issue = mustGet(key);
-    if (!(prop in issue.properties)) {
-      throw new SimError(404, ["The property with key '" + prop + "' does not exist."], {});
+  // PUT /rest/api/v3/issue/{key}/readiness: the Reporter writes one grade in one call.
+  // body: { value, comment?, labels?, status? }. Never moves "updated". One comment at most.
+  function writeReadiness(key, body, actor) {
+    const issue = mustGetStory(key);
+    if (!body || typeof body.value !== "object" || body.value === null) {
+      throw new SimError(400, ["Send the grade as {\"value\": {...}}"], {});
     }
-    return JSON.parse(JSON.stringify(issue.properties[prop]));
-  }
-
-  // PUT .../properties/{prop}. Any JSON value. Never moves "updated".
-  function setProperty(key, prop, value) {
-    const issue = mustGet(key);
-    issue.properties[prop] = JSON.parse(JSON.stringify(value === undefined ? null : value));
-  }
-
-  // POST .../comment. Plain text in the simulator. Never moves "updated".
-  function addComment(key, text, actor) {
-    const issue = mustGet(key);
-    // An empty comment is refused, like Jira does.
-    if (typeof text !== "string" || text.trim() === "") {
-      throw new SimError(400, [], { comment: "Comment body can not be empty!" });
+    // The grade itself.
+    issue.readiness = JSON.parse(JSON.stringify(body.value));
+    // One comment for this grade, if the Reporter sent one.
+    if (typeof body.comment === "string" && body.comment.trim() !== "") {
+      addComment(issue, body.comment, actor);
     }
-    const comment = { id: String(nextCommentId), author: { accountId: actor }, body: text, created: nowIso() };
-    nextCommentId = nextCommentId + 1;
-    issue.comments.push(comment);
-    return { id: comment.id };
-  }
-
-  // GET .../transitions: the transitions allowed from the current status.
-  function listTransitions(key) {
-    const issue = mustGet(key);
-    // CRs have no workflow in the simulator.
-    if (issue.issuetype !== "Story") {
-      return [];
+    // Labels and an optional move back. These are not content, but they are changes Jira reports.
+    const items = [];
+    if (Array.isArray(body.labels)) {
+      const next = body.labels.map(String);
+      if (JSON.stringify(next) !== JSON.stringify(issue.labels)) {
+        issue.labels = next;
+        items.push({ field: "labels" });
+      }
     }
-    return TRANSITIONS
-      .filter(function (t) { return t.from === null || t.from === issue.status; })
-      .map(function (t) { return { id: t.id, name: t.name }; });
+    if (body.status && STATUSES.indexOf(body.status) !== -1 && body.status !== issue.status) {
+      items.push({ field: "status", fromString: issue.status, toString: body.status });
+      issue.status = body.status;
+    }
+    return { webhooks: items.length === 0 ? [] : [webhook("jira:issue_updated", issue, actor, items)] };
   }
 
-  // POST .../transitions. Ready for Dev runs the gate.
+  // POST /rest/api/v3/issue/{key}/transitions: { "to": "Ready for Dev" } runs the gate; { "to": "Refinement" } moves back.
   function transition(key, body, actor) {
-    const issue = mustGet(key);
-    // Find the transition by id or by name.
-    const wanted = body && body.transition ? body.transition : {};
-    const found = TRANSITIONS.find(function (t) { return t.id === String(wanted.id) || t.name === wanted.name; });
-    // Unknown, not a story, or not allowed from here.
-    if (!found || issue.issuetype !== "Story" || (found.from !== null && found.from !== issue.status)) {
-      throw new SimError(400, ["Transition not allowed from " + issue.status], {});
+    const issue = mustGetStory(key);
+    const to = body ? body.to : undefined;
+    if (STATUSES.indexOf(to) === -1) {
+      throw new SimError(400, ["Send {\"to\": \"Ready for Dev\"} or {\"to\": \"Refinement\"}"], {});
     }
     // Ready for Dev: ask the gate.
     let via = null;
-    if (found.id === "21") {
-      const decision = gate.evaluate(view(issue), body.override, overrideRoles);
+    if (to === "Ready for Dev") {
+      const decision = gate.evaluate(card(issue), body.override, overrideRoles);
       if (!decision.allowed) {
         const error = new SimError(400, [], {});
         error.body = decision.body;
         throw error;
       }
       via = decision.via;
-      // An override leaves a trace: a property and a comment by the caller.
+      // An override leaves a trace: stored on the story, and one comment by the caller.
       if (via === "override") {
         const o = body.override;
-        issue.properties.override = { by: o.by, role: o.role, reason: o.reason, at: nowIso() };
-        addComment(key, "Override by " + o.by + " (" + o.role + "): " + o.reason, actor);
+        issue.override = { by: o.by, role: o.role, reason: o.reason, at: nowIso() };
+        addComment(issue, "Override by " + o.by + " (" + o.role + "): " + o.reason, actor);
       }
     }
-    // Move the status. A status change never moves "updated".
+    // Move the status. A status change never moves "updated". Send a webhook only if it really changed.
     const from = issue.status;
-    issue.status = found.name;
-    // Send a webhook only if the status really changed.
-    if (from === found.name) {
+    issue.status = to;
+    if (from === to) {
       return { via: via, webhooks: [] };
     }
-    return { via: via, webhooks: [webhook("jira:issue_updated", issue, actor, [{ field: "status", fromString: from, toString: found.name }])] };
+    return { via: via, webhooks: [webhook("jira:issue_updated", issue, actor, [{ field: "status", fromString: from, toString: to }])] };
   }
 
-  // GET /rest/api/v3/search?jql=project = KEY&maxResults=N
+  // GET /rest/api/v3/search?jql=project = KEY&maxResults=N. Used by the load test.
   function search(jql, maxResults) {
     const project = parseJql(jql);
     if (!project) {
@@ -528,31 +486,25 @@ function createStore(options) {
       max = 50;
     }
     max = Math.min(Math.max(max, 0), 1000);
-    // Every issue in the project, in key order.
     const keys = Array.from(issues.keys())
       .filter(function (k) { return issues.get(k).project === project; })
       .sort(compareKeys);
-    return { total: keys.length, issues: keys.slice(0, max).map(function (k) { return view(issues.get(k)); }) };
+    return { total: keys.length, issues: keys.slice(0, max).map(function (k) { return card(issues.get(k)); }) };
   }
 
-  // GET /board: the developer board. Only stories that passed the gate, or were overridden.
+  // GET /board: the developer board. Only stories in Ready for Dev that passed the gate, or were overridden.
   function board() {
     const out = [];
-    const keys = Array.from(issues.keys()).sort(compareKeys);
-    for (const k of keys) {
+    for (const k of Array.from(issues.keys()).sort(compareKeys)) {
       const issue = issues.get(k);
-      // Only stories that are in Ready for Dev.
       if (issue.issuetype !== "Story" || issue.status !== "Ready for Dev") {
         continue;
       }
-      // Either a fresh L4 with a CR link, or an override.
-      const v = view(issue);
-      const overridden = !!issue.properties.override;
-      if (!gate.passesReadyRule(v) && !overridden) {
-        continue;
+      const c = card(issue);
+      const overridden = !!issue.override;
+      if (gate.passesReadyRule(c) || overridden) {
+        out.push({ key: k, summary: c.summary, level: c.level, override: overridden });
       }
-      const readiness = issue.properties.readiness || {};
-      out.push({ key: k, summary: issue.content.summary, level: readiness.level === undefined ? null : readiness.level, override: overridden });
     }
     return { issues: out };
   }
@@ -564,14 +516,11 @@ function createStore(options) {
     getIssue: getIssue,
     updateIssue: updateIssue,
     createLink: createLink,
-    getProperty: getProperty,
-    setProperty: setProperty,
-    addComment: addComment,
-    listTransitions: listTransitions,
+    writeReadiness: writeReadiness,
     transition: transition,
     search: search,
     board: board
   };
 }
 
-module.exports = { createStore: createStore, parseJql: parseJql, SimError: SimError, TRANSITIONS: TRANSITIONS };
+module.exports = { createStore: createStore, parseJql: parseJql, SimError: SimError, STATUSES: STATUSES };

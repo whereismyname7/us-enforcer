@@ -87,12 +87,12 @@ async function waitFor(fn, what, timeoutMs) {
   throw new Error("timed out waiting for " + what);
 }
 
-// Wait until a story is graded for the version saved right now, then return the issue.
+// Wait until a story is graded for the version saved right now (its card level is no longer Pending), then return the card.
 async function waitForGrade(key) {
   return waitFor(async function () {
     const res = await jira("GET", "/rest/api/v3/issue/" + key);
-    const r = res.body && res.body.properties ? res.body.properties.readiness : null;
-    if (r && r.state === "Graded" && r.story_updated_at === res.body.fields.updated) {
+    const r = res.body;
+    if (r && r.level && r.level !== "Pending") {
       return res.body;
     }
     return null;
@@ -106,7 +106,7 @@ async function getIssue(key) {
 
 // The comments on an issue written by our bot.
 function botComments(issue) {
-  return issue.fields.comment.comments.filter(function (c) { return c.author.accountId === BOT; });
+  return issue.comments.filter(function (c) { return c.author === BOT; });
 }
 
 // Throw a clear "expected ..., got ..." error if a condition is false.
@@ -116,9 +116,9 @@ function check(ok, expected, got) {
   }
 }
 
-// The ids of a list of checks.
+// The check ids in a list of card lines such as "R-AC-01: 1 criteria are not Given/When/Then".
 function ids(list) {
-  return (list || []).map(function (c) { return c.id; });
+  return (list || []).map(function (line) { return line.split(":")[0]; });
 }
 
 // Shared between steps.
@@ -155,19 +155,19 @@ const steps = [
     const linked = await jira("POST", "/rest/api/v3/issueLink", sample("link-NORTH-1-CR-12.json"));
     check(linked.status === 201, "201 on link", linked.status);
     const issue = await waitForGrade("NORTH-1");
-    const r = issue.properties.readiness;
-    check(r.level === 1, "level 1", r.level);
+    const r = issue;
+    check(r.level === "L1", "level L1", r.level);
     const want = ["R-AC-01", "R-AC-02", "R-OPQ-01", "R-VAG-01", "I-ADR-002", "I-CR-01", "I-EVT-01", "I-OWN-01"];
-    check(JSON.stringify(ids(r.failed)) === JSON.stringify(want), JSON.stringify(want), ids(r.failed));
+    check(JSON.stringify(ids(r.missing)) === JSON.stringify(want), JSON.stringify(want), ids(r.missing));
     // The comment and labels are written just after the property, so allow them a moment.
     const done = await waitFor(async function () {
       const i = await getIssue("NORTH-1");
       const hasComment = botComments(i).some(function (c) { return c.body.indexOf("Story readiness: L1 of 4") === 0; });
-      return hasComment && i.fields.labels.indexOf("readiness-L1") !== -1 ? i : null;
+      return hasComment && i.labels.indexOf("readiness-L1") !== -1 ? i : null;
     }, "the L1 comment and label").catch(function () { return null; });
     const latest = done || (await getIssue("NORTH-1"));
     check(botComments(latest).some(function (c) { return c.body.indexOf("Story readiness: L1 of 4") === 0; }), "a bot comment starting \"Story readiness: L1 of 4\"", botComments(latest).map(function (c) { return c.body.split("\n")[0]; }));
-    check(latest.fields.labels.indexOf("readiness-L1") !== -1, "label readiness-L1", latest.fields.labels);
+    check(latest.labels.indexOf("readiness-L1") !== -1, "label readiness-L1", latest.labels);
   }],
 
   ["S3", "gate blocks below L4", async function () {
@@ -176,7 +176,7 @@ const steps = [
     check(res.body.errorMessages[0].indexOf("not ready for development") !== -1, "\"not ready for development\"", res.body.errorMessages[0]);
     check(res.body.errors.readiness === "L1", "errors.readiness L1", res.body.errors.readiness);
     const issue = await getIssue("NORTH-1");
-    check(issue.fields.status.name === "Refinement", "status Refinement", issue.fields.status.name);
+    check(issue.status === "Refinement", "status Refinement", issue.status);
   }],
 
   ["S4", "gateway readiness API needs the key", async function () {
@@ -194,18 +194,18 @@ const steps = [
     const storyPut = await jira("PUT", "/rest/api/v3/issue/NORTH-1", sample("stories/reserve-stock-v2.json"));
     check(storyPut.status === 204, "204 on the story edit", storyPut.status);
     const straight = await getIssue("NORTH-1");
-    check(straight.properties.readiness.state === "Pending", "Pending straight after the edit", straight.properties.readiness.state);
+    check(straight.level === "Pending", "Pending straight after the edit", straight.level);
     const issue = await waitForGrade("NORTH-1");
-    const r = issue.properties.readiness;
-    check(r.level === 4, "level 4", r.level);
-    check(r.failed.length === 0, "no failed checks", ids(r.failed));
+    const r = issue;
+    check(r.level === "L4", "level L4", r.level);
+    check(r.missing.length === 0, "no failed checks", ids(r.missing));
     check(JSON.stringify(ids(r.warnings)) === JSON.stringify(["I-SEC-01"]), "warnings [I-SEC-01]", ids(r.warnings));
     const labelled = await waitFor(async function () {
       const i = await getIssue("NORTH-1");
-      return i.fields.labels.indexOf("readiness-L4") !== -1 && i.fields.labels.indexOf("needs-security-review") !== -1 ? i : null;
+      return i.labels.indexOf("readiness-L4") !== -1 && i.labels.indexOf("needs-security-review") !== -1 ? i : null;
     }, "the L4 labels").catch(function () { return null; });
     const latest = labelled || (await getIssue("NORTH-1"));
-    check(latest.fields.labels.indexOf("readiness-L4") !== -1 && latest.fields.labels.indexOf("needs-security-review") !== -1, "labels readiness-L4 and needs-security-review", latest.fields.labels);
+    check(latest.labels.indexOf("readiness-L4") !== -1 && latest.labels.indexOf("needs-security-review") !== -1, "labels readiness-L4 and needs-security-review", latest.labels);
   }],
 
   ["S6", "gate passes at L4", async function () {
@@ -219,18 +219,18 @@ const steps = [
     const put = await jira("PUT", "/rest/api/v3/issue/NORTH-1", sample("stories/reserve-stock-v3.json"));
     check(put.status === 204, "204 on the edit", put.status);
     const issue = await waitForGrade("NORTH-1");
-    const r = issue.properties.readiness;
-    check(r.level === 3, "level 3", r.level);
-    check(JSON.stringify(ids(r.failed)) === JSON.stringify(["R-CR-03"]), "failed [R-CR-03]", ids(r.failed));
-    check(r.failed[0].message === "\"discount\" is out of scope for CR-12", "the R-CR-03 message", r.failed[0].message);
+    const r = issue;
+    check(r.level === "L3", "level L3", r.level);
+    check(JSON.stringify(ids(r.missing)) === JSON.stringify(["R-CR-03"]), "failed [R-CR-03]", ids(r.missing));
+    check(r.missing[0] === "R-CR-03: \"discount\" is out of scope for CR-12", "the R-CR-03 message", r.missing[0]);
     // The Reporter moves the story back, then comments. Wait for both.
     const back = await waitFor(async function () {
       const i = await getIssue("NORTH-1");
       const moved = botComments(i).some(function (c) { return c.body.indexOf("Moved back to Refinement") === 0; });
-      return i.fields.status.name === "Refinement" && moved ? i : null;
+      return i.status === "Refinement" && moved ? i : null;
     }, "status Refinement").catch(function () { return null; });
     const latest = back || (await getIssue("NORTH-1"));
-    check(latest.fields.status.name === "Refinement", "status Refinement", latest.fields.status.name);
+    check(latest.status === "Refinement", "status Refinement", latest.status);
     check(botComments(latest).some(function (c) { return c.body.indexOf("Moved back to Refinement") === 0; }), "a bot comment starting \"Moved back to Refinement\"", botComments(latest).map(function (c) { return c.body.split("\n")[0]; }));
     const board = await jira("GET", "/board");
     check(!board.body.issues.some(function (i) { return i.key === "NORTH-1"; }), "NORTH-1 not on the board", board.body.issues);
@@ -240,8 +240,8 @@ const steps = [
     const res = await jira("POST", "/rest/api/v3/issue/NORTH-1/transitions", sample("transition-override.json"));
     check(res.status === 204, "204", res.status);
     const issue = await getIssue("NORTH-1");
-    check(issue.fields.status.name === "Ready for Dev", "status Ready for Dev", issue.fields.status.name);
-    check(issue.fields.comment.comments.some(function (c) { return c.body.indexOf("Override by lead.architect (architect)") !== -1; }), "an override comment", null);
+    check(issue.status === "Ready for Dev", "status Ready for Dev", issue.status);
+    check(issue.comments.some(function (c) { return c.body.indexOf("Override by lead.architect (architect)") !== -1; }), "an override comment", null);
     const board = await jira("GET", "/board");
     const row = board.body.issues.find(function (i) { return i.key === "NORTH-1"; });
     check(!!row && row.override === true, "NORTH-1 on the board with override true", board.body.issues);
@@ -251,10 +251,10 @@ const steps = [
     const created = await jira("POST", "/rest/api/v3/issue", sample("stories/gift-wrap.json"));
     check(created.status === 201, "201", created.status);
     const issue = await waitForGrade("NORTH-2");
-    const r = issue.properties.readiness;
-    check(r.level === 2, "level 2", r.level);
-    check(ids(r.failed).indexOf("R-CR-01") !== -1, "failed includes R-CR-01", ids(r.failed));
-    state.northTwoCheckedAt = r.checked_at;
+    const r = issue;
+    check(r.level === "L2", "level L2", r.level);
+    check(ids(r.missing).indexOf("R-CR-01") !== -1, "failed includes R-CR-01", ids(r.missing));
+    state.northTwoCheckedAt = r.checkedAt;
   }],
 
   ["S10", "bad webhook signature refused", async function () {
@@ -271,22 +271,22 @@ const steps = [
   }],
 
   ["S12", "recheck through the gateway", async function () {
-    const before = state.northTwoCheckedAt || (await getIssue("NORTH-2")).properties.readiness.checked_at;
+    const before = state.northTwoCheckedAt || (await getIssue("NORTH-2")).checkedAt;
     const res = await gw("POST", "/v1/stories/NORTH-2/recheck", { key: true });
     check(res.status === 202, "202", res.status);
     const after = await waitFor(async function () {
-      const r = (await getIssue("NORTH-2")).properties.readiness;
-      return r.state === "Graded" && r.checked_at !== before ? r.checked_at : null;
+      const r = await getIssue("NORTH-2");
+      return r.level !== "Pending" && r.checkedAt !== before ? r.checkedAt : null;
     }, "a new checked_at").catch(function () { return null; });
     check(!!after, "a new checked_at", before);
   }],
 
   ["S13", "no update loop", async function () {
-    const first = (await getIssue("NORTH-1")).fields.comment.comments.length;
+    const first = (await getIssue("NORTH-1")).comments.length;
     await pause(3000);
     const issue = await getIssue("NORTH-1");
-    check(issue.fields.comment.comments.length === first, first + " comments", issue.fields.comment.comments.length);
-    const movedBack = issue.fields.comment.comments.filter(function (c) { return c.body.indexOf("Moved back") === 0; });
+    check(issue.comments.length === first, first + " comments", issue.comments.length);
+    const movedBack = issue.comments.filter(function (c) { return c.body.indexOf("Moved back") === 0; });
     check(movedBack.length === 1, "exactly one \"Moved back\" comment", movedBack.length);
   }]
 ];

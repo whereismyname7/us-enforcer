@@ -1,0 +1,23 @@
+{
+  "key": "NORTH-1",
+  "type": "Story",
+  "level": "Pending",
+  "status": "Refinement",
+  "summary": "[Cart] Reserve stock",
+  "missing": [],
+  "warnings": [],
+  "asA": "customer",
+  "iWant": "my items reserved",
+  "soThat": "they don't sell out",
+  "acceptanceCriteria": "Stock should be reserved quickly at checkout. Reservation time TBD.",
+  "technicalNotes": "",
+  "dueDate": null,
+  "links": [
+    { "relation": "implements", "key": "CR-12", "type": "Change Request", "status": "Approved" }
+  ],
+  "labels": [],
+  "override": null,
+  "comments": [],
+  "updated": "2026-11-03T09:00:00.250Z",
+  "checkedAt": null
+}

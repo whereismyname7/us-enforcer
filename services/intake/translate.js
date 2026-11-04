@@ -1,6 +1,6 @@
-// The anti-corruption layer (ADR-005). Jira's field names stop here.
-// These pure functions turn a Jira issue into the event fields every other service uses.
-// If Jira renames a field, only this file changes.
+// The anti-corruption layer (ADR-005). The simulator's field names stop here.
+// These pure functions turn a story card into the event fields every other service uses.
+// If Jira's shape changes, only this file changes.
 
 // Missing text becomes "".
 function text(value) {
@@ -17,63 +17,41 @@ function date(value) {
   return value === undefined || value === null || value === "" ? null : String(value);
 }
 
-// The relation name for each link type, seen from the story's side.
-// The story is the inward issue when Jira shows the other side as outwardIssue.
-const RELATIONS = {
-  Implements: { inward: "implements", outward: "is_implemented_by" },
-  Blocks: { inward: "blocks", outward: "is_blocked_by" }
-};
+// The relations we understand. The card already shows each link from the story's side.
+const RELATIONS = ["implements", "is_implemented_by", "blocks", "is_blocked_by"];
 
-// Turn Jira's issuelinks into our links: { relation, key, issue_type, status }.
-function translateLinks(issuelinks) {
-  const out = [];
-  for (const link of issuelinks || []) {
-    // Skip link types we do not know.
-    const names = RELATIONS[link.type && link.type.name];
-    if (!names) {
-      continue;
-    }
-    // Which side is the other issue on, and so which relation applies.
-    const other = link.outwardIssue || link.inwardIssue;
-    const relation = link.outwardIssue ? names.inward : names.outward;
-    const otherFields = other.fields || {};
-    out.push({
-      relation: relation,
-      key: other.key,
-      issue_type: otherFields.issuetype ? otherFields.issuetype.name : "",
-      status: otherFields.status ? otherFields.status.name : ""
-    });
-  }
-  return out;
+// Turn the card's links into our links: { relation, key, issue_type, status }.
+function translateLinks(links) {
+  return (links || [])
+    .filter(function (l) { return RELATIONS.indexOf(l.relation) !== -1; })
+    .map(function (l) { return { relation: l.relation, key: l.key, issue_type: text(l.type), status: text(l.status) }; });
 }
 
-// Turn a Jira story into the event's "story" object.
-function translateStory(issue) {
-  const f = issue.fields || {};
+// Turn a story card into the event's "story" object.
+function translateStory(card) {
   return {
-    summary: text(f.summary),
-    as_a: text(f.asA),
-    i_want: text(f.iWant),
-    so_that: text(f.soThat),
-    acceptance_criteria: text(f.acceptanceCriteria),
-    technical_notes: text(f.technicalNotes),
-    due_date: date(f.dueDate),
-    status: f.status ? text(f.status.name) : "",
-    links: translateLinks(f.issuelinks)
+    summary: text(card.summary),
+    as_a: text(card.asA),
+    i_want: text(card.iWant),
+    so_that: text(card.soThat),
+    acceptance_criteria: text(card.acceptanceCriteria),
+    technical_notes: text(card.technicalNotes),
+    due_date: date(card.dueDate),
+    status: text(card.status),
+    links: translateLinks(card.links)
   };
 }
 
-// Turn a Jira Change Request into one entry of "change_requests".
-function translateChangeRequest(issue) {
-  const f = issue.fields || {};
+// Turn a Change Request card into one entry of "change_requests".
+function translateChangeRequest(card) {
   return {
-    key: issue.key,
-    status: f.status ? text(f.status.name) : "",
-    impacted_systems: list(f.impactedSystems),
-    in_scope: list(f.inScope),
-    out_of_scope: list(f.outOfScope),
-    target_date: date(f.targetDate),
-    updated_at: text(f.updated)
+    key: card.key,
+    status: text(card.status),
+    impacted_systems: list(card.impactedSystems),
+    in_scope: list(card.inScope),
+    out_of_scope: list(card.outOfScope),
+    target_date: date(card.targetDate),
+    updated_at: text(card.updated)
   };
 }
 
@@ -85,18 +63,18 @@ function implementedCrKeys(story) {
 }
 
 // Build one StoryChanged v1 event.
-// issue: the Jira story. crIssues: the Jira CRs it implements. trigger: why we publish.
-function buildStoryChanged(issue, crIssues, trigger, eventId, occurredAt) {
+// card: the story. crCards: the CRs it implements. trigger: why we publish.
+function buildStoryChanged(card, crCards, trigger, eventId, occurredAt) {
   return {
     event_id: eventId,
     type: "StoryChanged",
     version: 1,
     occurred_at: occurredAt,
-    story_key: issue.key,
-    story_updated_at: text(issue.fields.updated),
+    story_key: card.key,
+    story_updated_at: text(card.updated),
     trigger: trigger,
-    story: translateStory(issue),
-    change_requests: crIssues.map(translateChangeRequest)
+    story: translateStory(card),
+    change_requests: crCards.map(translateChangeRequest)
   };
 }
 

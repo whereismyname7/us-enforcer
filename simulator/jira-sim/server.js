@@ -42,8 +42,8 @@ function log(fields) {
   console.log(JSON.stringify(line));
 }
 
-// The memory of every issue. The "self" links use the name other containers know us by.
-const store = createStore({ botAccount: BOT_ACCOUNT, overrideRoles: OVERRIDE_ROLES, baseUrl: "http://jira-sim:" + PORT });
+// The memory of every issue.
+const store = createStore({ botAccount: BOT_ACCOUNT, overrideRoles: OVERRIDE_ROLES });
 
 // The webhook sender.
 const sender = createSender({ url: WEBHOOK_URL, signingKey: SIGNING_KEY_TEXT, log: log });
@@ -171,35 +171,19 @@ app.post("/rest/api/v3/issueLink", handle(function (req, res) {
   sendWebhooks(result.webhooks);
 }));
 
-// Read one issue property, for example "readiness".
-app.get("/rest/api/v3/issue/:key/properties/:prop", handle(function (req, res) {
-  const value = store.getProperty(req.params.key, req.params.prop);
-  res.json({ key: req.params.prop, value: value });
+// The Reporter writes one grade: the readiness value, one comment, the labels and any move back.
+app.put("/rest/api/v3/issue/:key/readiness", handle(function (req, res) {
+  const result = store.writeReadiness(req.params.key, req.body, req.actor);
+  res.status(204).end();
+  sendWebhooks(result.webhooks);
 }));
 
-// Write one issue property. No webhook.
-app.put("/rest/api/v3/issue/:key/properties/:prop", handle(function (req, res) {
-  store.setProperty(req.params.key, req.params.prop, req.body);
-  res.status(200).json({ key: req.params.prop, value: req.body });
-}));
-
-// Add a plain-text comment. No webhook.
-app.post("/rest/api/v3/issue/:key/comment", handle(function (req, res) {
-  const result = store.addComment(req.params.key, req.body ? req.body.body : undefined, req.actor);
-  res.status(201).json(result);
-}));
-
-// List the transitions allowed from the story's status.
-app.get("/rest/api/v3/issue/:key/transitions", handle(function (req, res) {
-  res.json({ transitions: store.listTransitions(req.params.key) });
-}));
-
-// Move a story. Ready for Dev runs the gate.
+// Move a story: { "to": "Ready for Dev" } runs the gate.
 app.post("/rest/api/v3/issue/:key/transitions", handle(function (req, res) {
   try {
     const result = store.transition(req.params.key, req.body || {}, req.actor);
     const issue = store.getIssue(req.params.key);
-    log({ level: "info", event: "transition_done", key: req.params.key, status: issue.fields.status.name, via: result.via, actor: req.actor });
+    log({ level: "info", event: "transition_done", key: req.params.key, status: issue.status, via: result.via, actor: req.actor });
     res.status(204).end();
     sendWebhooks(result.webhooks);
   } catch (err) {

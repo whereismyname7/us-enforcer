@@ -73,9 +73,8 @@ function withStoryLock(key, work) {
 
 // Find "CR-12" style mentions in the story's text.
 function mentionedCrKeys(issue) {
-  const f = issue.fields;
   // The text fields a BA writes in.
-  const all = [f.summary, f.iWant, f.soThat, f.acceptanceCriteria, f.technicalNotes].map(function (t) { return t || ""; }).join("\n");
+  const all = [issue.summary, issue.iWant, issue.soThat, issue.acceptanceCriteria, issue.technicalNotes].map(function (t) { return t || ""; }).join("\n");
   // Every distinct match, in the order found.
   const found = all.match(/\bCR-[0-9]+\b/g) || [];
   return Array.from(new Set(found));
@@ -88,12 +87,12 @@ function publishStory(key, trigger, requestId) {
     // Read the story as it is saved right now.
     let issue = await jira.getIssue(key);
     // Gone, or not a story: nothing to publish.
-    if (!issue || issue.fields.issuetype.name !== "Story") {
+    if (!issue || issue.type !== "Story") {
       return null;
     }
 
     // AUTO-LINK. A BA wrote "CR-12" but forgot the link: add it for them, as the bot.
-    const linkedKeys = translate.translateLinks(issue.fields.issuelinks).map(function (l) { return l.key; });
+    const linkedKeys = translate.translateLinks(issue.links).map(function (l) { return l.key; });
     let addedLink = false;
     for (const crKey of mentionedCrKeys(issue)) {
       // Already linked: nothing to do.
@@ -102,7 +101,7 @@ function publishStory(key, trigger, requestId) {
       }
       // It must exist and be a Change Request.
       const cr = await jira.getIssue(crKey);
-      if (!cr || cr.fields.issuetype.name !== "Change Request") {
+      if (!cr || cr.type !== "Change Request") {
         continue;
       }
       // Link it and say so.
@@ -137,7 +136,7 @@ function publishStory(key, trigger, requestId) {
 
 // The stories linked to a CR, from the CR's own view.
 function linkedStoryKeys(crIssue) {
-  return translate.translateLinks(crIssue.fields.issuelinks)
+  return translate.translateLinks(crIssue.links)
     .filter(function (l) { return l.issue_type === "Story"; })
     .map(function (l) { return l.key; });
 }

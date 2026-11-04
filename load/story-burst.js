@@ -47,13 +47,12 @@ export function teardown() {
   for (let i = 0; i < 40; i++) {
     const res = http.get(JIRA + "/rest/api/v3/search?jql=" + encodeURIComponent("project = LOAD") + "&maxResults=1000");
     issues = res.json("issues") || [];
-    const pending = issues.filter(function (x) { const r = x.properties && x.properties.readiness; return !r || r.state !== "Graded"; });
+    const pending = issues.filter(function (x) { return x.level === "Pending"; });
     if (pending.length === 0) break;
     sleep(0.5);
   }
   for (const x of issues) {
-    const r = x.properties && x.properties.readiness;
-    const ok = !!r && r.state === "Graded" && (Date.parse(r.checked_at) - Date.parse(x.fields.updated)) <= 10000;
+    const ok = x.level !== "Pending" && !!x.checkedAt && (Date.parse(x.checkedAt) - Date.parse(x.updated)) <= 10000;
     gradedWithinSlo.add(ok);
   }
 }
