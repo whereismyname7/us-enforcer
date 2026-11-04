@@ -11,6 +11,63 @@ The stories are about **Northline Shop**, the system from the [Lab2 repo](https:
 | **OS** | Windows (PowerShell) · macOS (Terminal) |
 | **Ports** | Jira simulator `9000`, API gateway `9001`. Nothing clashes with Lab2 (8000 to 8082, 6379, 9092). |
 
+---
+
+## Why this exists
+
+Bad stories are cheap to fix when they are written and expensive to fix mid-sprint. This gate catches them early.
+
+| # | Problem | How the gate handles it |
+|---|---------|-------------------------|
+| 1 | **Inconsistent stories.** Every BA writes differently. | A structured template check: `[Area]` title, As a / I want / so that |
+| 2 | **Untestable acceptance criteria**: "fast", "TBD", happy path only | Given/When/Then, vague-word, open-question and negative-case checks |
+| 3 | **Unknown impact.** Nobody knows which services a story touches. | Impact check against the target system's C4 containers and OpenAPI |
+| 4 | **Architecture broken at the requirement stage** | ADR conflict checks (e.g. "stock changes must use events") |
+| 5 | **Stories not requested, approved or in scope** | Change Request (CR) checks: linked, Approved, impact declared, nothing out of scope |
+| 6 | **Half-ready stories reach the sprint and bounce back** | A hard L4 gate on "Ready for Dev" and a developer board that shows only L4 stories |
+| 7 | **Readiness is opinion** | One objective level plus a comment listing exactly what is missing |
+
+**Limit:** the gate checks structure, not whether the requirement is right, so refinement meetings stay. The benefits above are what we intend; proving them needs a small pilot (for example, stories bounced back by developers, before and after).
+
+**Is this new?** Parts of it exist. Marketplace tools score stories against generic rules, grade them A to E, generate stories with INVEST audits, provide AC templates, or draw C4 diagrams from epics. We found none that checks stories against **the team's own** C4, ADRs, OpenAPI and approved CRs and enforces the result as a hard gate. We searched the Atlassian Marketplace and the web on 2 Nov 2026; a closed enterprise product could still exist.
+
+### How it works
+
+1. The BA saves a story. Readiness becomes **Pending**. Drafts can always be saved.
+2. Jira (here, the simulator) sends a signed webhook. **Intake** adds the CR data and publishes `StoryChanged`.
+3. **Rules** and **Impact** check the story in parallel and each publish `StoryChecked`.
+4. **Reporter** combines both results into a level, writes it to Jira, and posts a comment listing what is missing.
+5. "Ready for Dev" is allowed only at **L4**. Below L4 the story stays in Refinement.
+6. Any edit resets the story to Pending and re-runs the checks. A story that drops below L4 moves back to Refinement.
+
+### Maturity levels
+
+| Level | Meaning | Requires |
+|-------|---------|----------|
+| L0 Not a draft | Not even the story shape | (an L1 check fails) |
+| L1 Draft | Has the story shape | `[Area]` title; As a / I want / so that |
+| L2 Defined | Testable | Given/When/Then, a negative case, no vague words, no TBD |
+| L3 Refined | Impact known | Linked to a CR, impacted containers found, no ADR conflict, impact declared by the CR |
+| L4 Dev-ready | Can enter a sprint | No open dependencies, CR Approved and in scope, data owner named, event or API named |
+
+Missing data caps the level: no acceptance criteria keeps a story at L1, and no CR link keeps it at L2. Rule-based checks with clear evidence block; heuristics only warn, so nobody is blocked by a guess. Full details: [`docs/maturity-levels.md`](docs/maturity-levels.md) and [`docs/checks.md`](docs/checks.md).
+
+### Where it is enforced
+
+| Layer | Strength | How |
+|-------|----------|-----|
+| Grade | Medium | Level L0 to L4 plus a comment listing exactly what is missing |
+| Block | Hard | The "Ready for Dev" transition requires L4 and reads the stored level, so the gate is instant and stays closed when the services are down |
+| Hide | Hard | The developer board shows only L4 stories |
+
+### Design decisions
+
+Version 1 uses **no AI**: it is predictable, explainable and testable, and no data leaves our systems. **Rules decide, AI advises** (ADR-007). AI can be added later, behind a setting, as warnings only.
+
+v1 runs against our own Jira simulator (ADR-008). Moving to real Jira means changing `JIRA_URL` and installing a thin Forge app that sends, displays and blocks but never grades (ADR-004). All nine decisions are in [`docs/adr/`](docs/adr/).
+
+---
+
 > Run **one block at a time**. Do not paste this whole file into a terminal.
 > Every command below assumes your current folder is the repository folder (`us-enforcer`).
 > Put **one command on each line**. Do not join lines with `&&`.
@@ -19,17 +76,18 @@ The stories are about **Northline Shop**, the system from the [Lab2 repo](https:
 
 ## Table of contents
 
-1. [Repository layout](#repository-layout)
-2. [Security rule](#security-rule-we-never-break)
-3. [How to read the commands](#how-to-read-the-commands)
-4. [Day 0: Set up](#day-0-set-up)
-5. [Day 1: See the system](#day-1-see-the-system)
-6. [Day 2: Design the split](#day-2-design-the-split)
-7. [Day 3: Connect](#day-3-connect-walk-one-story-through-the-system)
-8. [Day 4: Scale and survive](#day-4-scale-and-survive)
-9. [Day 5: Modernise and govern](#day-5-modernise-and-govern)
-10. [Clean up](#clean-up)
-11. [Friday checklist](#friday-checklist)
+1. [Why this exists](#why-this-exists)
+2. [Repository layout](#repository-layout)
+3. [Security rule](#security-rule-we-never-break)
+4. [How to read the commands](#how-to-read-the-commands)
+5. [Day 0: Set up](#day-0-set-up)
+6. [Day 1: See the system](#day-1-see-the-system)
+7. [Day 2: Design the split](#day-2-design-the-split)
+8. [Day 3: Connect](#day-3-connect-walk-one-story-through-the-system)
+9. [Day 4: Scale and survive](#day-4-scale-and-survive)
+10. [Day 5: Modernise and govern](#day-5-modernise-and-govern)
+11. [Clean up](#clean-up)
+12. [Friday checklist](#friday-checklist)
 
 ---
 
