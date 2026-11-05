@@ -34,7 +34,13 @@ docker compose run --rm demo
 | 9002 | Swagger UI |
 | 9003 | Case viewer: every story and CR, with buttons to complete or break a story |
 
-Also: `docker compose run --rm fitness` (architecture rules) and `docker compose run --rm k6` (SLO load test).
+```bash
+docker compose run --rm fitness
+```
+
+```bash
+docker compose run --rm k6
+```
 
 ## Architecture
 
