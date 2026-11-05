@@ -115,6 +115,30 @@ services:
       - ./ui:/usr/share/nginx/html:ro
     restart: unless-stopped
 
+  # Reads /metrics from Intake and the Reporter. Internal only; Grafana shows it.
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+
+  # The monitoring dashboard, open without a login. Laptop port 9004.
+  grafana:
+    image: grafana/grafana:11.2.2
+    ports:
+      - "9004:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: "/etc/grafana/provisioning/dashboards/readiness.json"
+    volumes:
+      - ./monitoring/grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - ./monitoring/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./monitoring/grafana/readiness.json:/etc/grafana/provisioning/dashboards/readiness.json:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
   # ---- Tools. Started by hand only. ----
 
   # The story from start to finish: docker compose run --rm demo

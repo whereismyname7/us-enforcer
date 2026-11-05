@@ -1,0 +1,8 @@
+# Grafana reads from Prometheus. Loaded at startup, so there is nothing to click.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    url: http://prometheus:9090
+    isDefault: true

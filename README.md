@@ -33,6 +33,7 @@ docker compose run --rm demo
 | 9001 | API gateway (`X-Api-Key: dev-only-api-key`) |
 | 9002 | Swagger UI |
 | 9003 | Case viewer: every story and CR, with buttons to complete or break a story |
+| 9004 | Grafana: the SLO, grades by level, grading lag and throughput (from Prometheus) |
 
 ```bash
 docker compose run --rm fitness

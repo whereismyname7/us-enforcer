@@ -27,6 +27,18 @@ function log(fields) {
   console.log(JSON.stringify(Object.assign({ ts: new Date().toISOString(), service: "reporter" }, fields)));
 }
 
+// Metrics for Prometheus: grades per level, dropped grades, and the SLI as a histogram of save-to-grade seconds.
+const LAG_BUCKETS = [0.5, 1, 2, 5, 10, 30];
+const metrics = { grades: { L0: 0, L1: 0, L2: 0, L3: 0, L4: 0 }, dropped: 0, lagBuckets: LAG_BUCKETS.map(function () { return 0; }), lagCount: 0, lagSum: 0 };
+
+function recordGrade(level, lagMs) {
+  metrics.grades[level]++;
+  const seconds = lagMs / 1000;
+  LAG_BUCKETS.forEach(function (le, i) { if (seconds <= le) metrics.lagBuckets[i]++; });
+  metrics.lagCount++;
+  metrics.lagSum += seconds;
+}
+
 // The lowest failed level decides: a failure at L2 means the story is L1. Nothing failed means L4.
 function computeLevel(checks) {
   const failed = checks.filter(function (c) { return !c.passed; }).map(function (c) { return c.level; });
@@ -69,12 +81,15 @@ async function handle(payload) {
   alreadyApplied.add(result.event_id);
   // 409: the story changed after this check, so a newer grade is on its way. 404: the story is gone.
   if (!res.ok) {
+    metrics.dropped++;
     log({ level: "info", event: "grade_dropped", story_key: result.story_key, status: res.status });
     return;
   }
   grades.set(result.story_key, grade);
   // The SLI from docs/slo/readiness-slo.md: how long from the save to the grade.
-  log({ level: "info", event: "graded", story_key: result.story_key, grade_level: grade.level, lag_ms: Date.now() - Date.parse(result.story_updated_at) });
+  const lagMs = Date.now() - Date.parse(result.story_updated_at);
+  recordGrade(grade.level, lagMs);
+  log({ level: "info", event: "graded", story_key: result.story_key, grade_level: grade.level, lag_ms: lagMs });
 }
 
 const app = express();
@@ -94,6 +109,18 @@ app.get("/v1/stories/:key/readiness", function (req, res) {
   const grade = grades.get(req.params.key);
   if (!grade) return res.status(404).json({ error: "not_graded", message: "No grade yet for " + req.params.key });
   res.json({ status: grade.level, missing: grade.missing, impacted_containers: grade.impacted_containers, story_updated_at: grade.story_updated_at });
+});
+
+// Metrics for Prometheus, in its plain text format. Internal only: the gateway does not route here.
+app.get("/metrics", function (req, res) {
+  const lines = ["# TYPE srg_grades_total counter"];
+  Object.keys(metrics.grades).forEach(function (l) { lines.push("srg_grades_total{level=\"" + l + "\"} " + metrics.grades[l]); });
+  lines.push("# TYPE srg_grades_dropped_total counter", "srg_grades_dropped_total " + metrics.dropped);
+  lines.push("# TYPE srg_grading_lag_seconds histogram");
+  LAG_BUCKETS.forEach(function (le, i) { lines.push("srg_grading_lag_seconds_bucket{le=\"" + le + "\"} " + metrics.lagBuckets[i]); });
+  lines.push("srg_grading_lag_seconds_bucket{le=\"+Inf\"} " + metrics.lagCount);
+  lines.push("srg_grading_lag_seconds_sum " + metrics.lagSum, "srg_grading_lag_seconds_count " + metrics.lagCount);
+  res.type("text/plain").send(lines.join("\n") + "\n");
 });
 
 async function main() {

@@ -42,6 +42,7 @@ Behaviour that is easy to break:
 - **One comment per change:** `jira-sim` skips the comment when the level and missing list are unchanged.
 - **Gateway addresses:** `gateway/nginx.conf` uses variables with `resolver` so names resolve per request. A static `upstream` keeps a stale IP after a restart and sends webhooks to the wrong service.
 - **State is in memory:** restarting `jira-sim` empties it, and restarting `reporter` empties the readiness API.
+- **Monitoring:** `intake` and `reporter` serve hand-written Prometheus text on `/metrics` (no metrics library). `prometheus` scrapes them, and `grafana` on port 9004 loads the dashboard in `monitoring/grafana/readiness.json`. The gateway does not route `/metrics`. The SLO panel reads the `srg_grading_lag_seconds` histogram, whose 10 s bucket is the SLO line.
 
 `docs/` describes this system. The target system being checked (Northline Shop) is `services/checker/target-containers.puml` plus the second half of `rules.yaml`. Northline's ADR-001 and ADR-002 in `rules.yaml` are not our ADRs in `docs/adr/`.
 

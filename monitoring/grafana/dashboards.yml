@@ -1,0 +1,7 @@
+# Load every dashboard JSON in this folder at startup.
+apiVersion: 1
+providers:
+  - name: story-readiness-gate
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards

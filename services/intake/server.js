@@ -15,6 +15,9 @@ function log(fields) {
   console.log(JSON.stringify(Object.assign({ ts: new Date().toISOString(), service: "intake" }, fields)));
 }
 
+// Counters for Prometheus: how each webhook ended.
+const webhooks = { published: 0, ignored: 0, failed: 0 };
+
 // Read one issue from Jira, or null if it does not exist.
 async function getIssue(key) {
   const res = await fetch(JIRA_URL + "/rest/api/v3/issue/" + encodeURIComponent(key), { signal: AbortSignal.timeout(2000) });
@@ -62,18 +65,28 @@ app.post("/webhook", async function (req, res) {
   try {
     const issue = key && (await getIssue(key));
     if (!issue || issue.type !== "Story") {
+      webhooks.ignored++;
       return res.status(202).json({ accepted: false });
     }
     const cr = issue.crKey ? await getIssue(issue.crKey) : null;
     const event = buildStoryChanged(issue, cr);
     // Keyed by story, so one story's events stay in order.
     await producer.send({ topic: TOPIC, messages: [{ key: event.story_key, value: JSON.stringify(event) }] });
+    webhooks.published++;
     log({ level: "info", event: "published", story_key: key, event_id: event.event_id, request_id: req.get("X-Request-Id") });
     res.status(202).json({ accepted: true, event_id: event.event_id });
   } catch (err) {
+    webhooks.failed++;
     log({ level: "error", event: "publish_failed", story_key: key, message: String(err.message) });
     res.status(503).json({ error: "unavailable", message: "Retry later" });
   }
+});
+
+// Metrics for Prometheus, in its plain text format. Internal only: the gateway does not route here.
+app.get("/metrics", function (req, res) {
+  const lines = ["# TYPE srg_webhooks_total counter"];
+  Object.keys(webhooks).forEach(function (r) { lines.push("srg_webhooks_total{result=\"" + r + "\"} " + webhooks[r]); });
+  res.type("text/plain").send(lines.join("\n") + "\n");
 });
 
 async function main() {
